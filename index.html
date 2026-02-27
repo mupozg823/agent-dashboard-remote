@@ -369,11 +369,25 @@ function checkAchievements(){
     }
   }
 }
+let prevLevel=1;
 function addCombo(success){
   if(success){combo++;if(combo>maxCombo)maxCombo=combo;
     clearTimeout(comboTimer);comboTimer=setTimeout(()=>{combo=0},5000);
     totalXP+=10+combo*2;
     if(combo>=5&&combo%5===0){toast(combo+'콤보!','ok');spawnP(cW()/2,cH()*.4,6+combo,'success')}
+    // Level up check
+    const newLvl=Math.floor(totalXP/500)+1;
+    if(newLvl>prevLevel){
+      prevLevel=newLvl;
+      toast('LEVEL UP! Lv.'+newLvl,'ok');
+      triggerShake(3);
+      for(let i=0;i<20;i++)spawnP(cW()*Math.random(),cH()*Math.random(),5,'success');
+      // All agents celebrate
+      agents.forEach(a=>{a.compFx=20});
+    }
+    // Random agent joy bounce on success
+    const joyAg=agents[Math.floor(Math.random()*agents.length)];
+    if(joyAg&&joyAg.st==='work')joyAg.compFx=Math.max(joyAg.compFx||0,8);
   }else{combo=0}
   checkAchievements();
 }
@@ -633,18 +647,29 @@ function drawAccessory(px,y,type,s,sitting){
 
 function drawNameTag(px,y,c){
   const nm=c.l;
-  cx.font='bold 10px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';cx.textAlign='center';
-  const nw=cx.measureText(nm).width+10;
-  // Rounded tag background
-  const tx=px-nw/2, ty=y, th=15;
-  cx.fillStyle=c.p+'DD';
-  cx.beginPath();const r2=3;
+  cx.font='bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';cx.textAlign='center';
+  const nw=cx.measureText(nm).width+14;
+  const tx=px-nw/2, ty=y, th=16;
+  // Shadow
+  cx.fillStyle='#00000018';
+  cx.beginPath();const r3=4;
+  cx.moveTo(tx+r3+1,ty+1);cx.lineTo(tx+nw-r3+1,ty+1);cx.arc(tx+nw-r3+1,ty+r3+1,r3,-Math.PI/2,0);
+  cx.lineTo(tx+nw+1,ty+th-r3+1);cx.arc(tx+nw-r3+1,ty+th-r3+1,r3,0,Math.PI/2);
+  cx.lineTo(tx+r3+1,ty+th+1);cx.arc(tx+r3+1,ty+th-r3+1,r3,Math.PI/2,Math.PI);
+  cx.lineTo(tx+1,ty+r3+1);cx.arc(tx+r3+1,ty+r3+1,r3,Math.PI,3*Math.PI/2);
+  cx.fill();
+  // Background
+  cx.fillStyle=c.p;
+  cx.beginPath();const r2=4;
   cx.moveTo(tx+r2,ty);cx.lineTo(tx+nw-r2,ty);cx.arc(tx+nw-r2,ty+r2,r2,-Math.PI/2,0);
   cx.lineTo(tx+nw,ty+th-r2);cx.arc(tx+nw-r2,ty+th-r2,r2,0,Math.PI/2);
   cx.lineTo(tx+r2,ty+th);cx.arc(tx+r2,ty+th-r2,r2,Math.PI/2,Math.PI);
   cx.lineTo(tx,ty+r2);cx.arc(tx+r2,ty+r2,r2,Math.PI,3*Math.PI/2);
   cx.fill();
-  cx.fillStyle='#FFF';cx.fillText(nm,px,y+11.5);
+  // Border
+  cx.strokeStyle='#00000030';cx.lineWidth=1;cx.stroke();
+  // Text
+  cx.fillStyle='#FFFFFFEE';cx.fillText(nm,px,y+12);
 }
 
 // ── Work effects ──
@@ -736,27 +761,36 @@ function drawStatusIcon(x,y,type){
 }
 
 function drawBub(x,y,t){
-  const d=t.length>12?t.slice(0,12)+'…':t;
-  cx.font='bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';
+  const d=t.length>18?t.slice(0,18)+'…':t;
+  cx.font='bold 13px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';
   const tw=cx.measureText(d).width;
-  const w=Math.max(tw+16,40), h=22;
+  const w=Math.max(tw+20,50), h=26;
   const bx=x-w/2, by=y-h;
+  // Shadow
+  cx.fillStyle='#00000020';
+  cx.beginPath();const rs=6;
+  cx.moveTo(bx+rs+2,by+2);cx.lineTo(bx+w-rs+2,by+2);cx.arc(bx+w-rs+2,by+rs+2,rs,-Math.PI/2,0);
+  cx.lineTo(bx+w+2,by+h-rs+2);cx.arc(bx+w-rs+2,by+h-rs+2,rs,0,Math.PI/2);
+  cx.lineTo(bx+rs+2,by+h+2);cx.arc(bx+rs+2,by+h-rs+2,rs,Math.PI/2,Math.PI);
+  cx.lineTo(bx+2,by+rs+2);cx.arc(bx+rs+2,by+rs+2,rs,Math.PI,3*Math.PI/2);
+  cx.fill();
   // Background with rounded corners
-  cx.fillStyle='#FFF8E8';
-  cx.beginPath();const r=5;
+  cx.fillStyle='#FFFDF5';
+  cx.beginPath();const r=6;
   cx.moveTo(bx+r,by);cx.lineTo(bx+w-r,by);cx.arc(bx+w-r,by+r,r,-Math.PI/2,0);
   cx.lineTo(bx+w,by+h-r);cx.arc(bx+w-r,by+h-r,r,0,Math.PI/2);
   cx.lineTo(bx+r,by+h);cx.arc(bx+r,by+h-r,r,Math.PI/2,Math.PI);
   cx.lineTo(bx,by+r);cx.arc(bx+r,by+r,r,Math.PI,3*Math.PI/2);
   cx.fill();
   // Border
-  cx.strokeStyle='#C8A882';cx.lineWidth=1.5;cx.stroke();
+  cx.strokeStyle='#A08060';cx.lineWidth=2;cx.stroke();
   // Tail
-  cx.fillStyle='#FFF8E8';cx.beginPath();cx.moveTo(x-3,y);cx.lineTo(x+3,y);cx.lineTo(x,y+4);cx.fill();
-  cx.strokeStyle='#C8A882';cx.lineWidth=1;cx.beginPath();cx.moveTo(x-3,y);cx.lineTo(x,y+4);cx.lineTo(x+3,y);cx.stroke();
-  // Text
+  cx.fillStyle='#FFFDF5';cx.beginPath();cx.moveTo(x-4,y);cx.lineTo(x+4,y);cx.lineTo(x,y+5);cx.fill();
+  cx.strokeStyle='#A08060';cx.lineWidth=1.5;cx.beginPath();cx.moveTo(x-4,y);cx.lineTo(x,y+5);cx.lineTo(x+4,y);cx.stroke();
+  // Text with shadow for readability
   cx.textAlign='center';cx.textBaseline='middle';
-  cx.fillStyle='#2A1B0A';cx.fillText(d,x,y-h/2);
+  cx.fillStyle='#00000012';cx.fillText(d,x+.5,y-h/2+.5);
+  cx.fillStyle='#1A0A00';cx.fillText(d,x,y-h/2);
   cx.textBaseline='alphabetic';
 }
 
@@ -1239,13 +1273,34 @@ function render(ts){
       spawnP(w/2+(Math.random()-.5)*60,comboY,1,'success');
     }
   }
-  // XP bar at bottom of HUD
-  const xpW=80,xpH=4,xpX=5,xpY=30;
-  cx.fillStyle='#333';cx.fillRect(xpX,xpY,xpW,xpH);
-  const xpPct=Math.min((totalXP%500)/500,1);
-  cx.fillStyle='#6666CC';cx.fillRect(xpX,xpY,xpW*xpPct,xpH);
-  cx.fillStyle='#AAA';cx.font='7px monospace';cx.textAlign='left';
-  cx.fillText('XP:'+totalXP,xpX+xpW+4,xpY+4);
+  // Level & XP bar
+  const lvl=Math.floor(totalXP/500)+1;
+  const xpInLvl=totalXP%500;
+  const xpW=70,xpH=5,xpX=5,xpY=31;
+  cx.fillStyle='#222';cx.fillRect(xpX,xpY,xpW,xpH);
+  const xpPct=Math.min(xpInLvl/500,1);
+  // XP bar gradient effect
+  const xpG=cx.createLinearGradient(xpX,0,xpX+xpW*xpPct,0);
+  xpG.addColorStop(0,'#4466CC');xpG.addColorStop(1,'#88AAFF');
+  cx.fillStyle=xpG;cx.fillRect(xpX,xpY,xpW*xpPct,xpH);
+  cx.fillStyle='#FFFFFF40';cx.fillRect(xpX,xpY,xpW*xpPct,1);
+  cx.fillStyle='#CCC';cx.font='bold 8px -apple-system,sans-serif';cx.textAlign='left';
+  cx.fillText('Lv.'+lvl,xpX+xpW+4,xpY+5);
+  cx.fillStyle='#888';cx.font='7px monospace';
+  cx.fillText(xpInLvl+'/500',xpX+xpW+28,xpY+5);
+  // Orchestration progress in HUD (if active)
+  if(orchRun&&orchRun.state&&orchRun.state!=='done'&&orchRun.state!=='failed'){
+    const oY=xpY+8;
+    const oTotal=orchRun.total||1, oDone=orchRun.done||0;
+    const oW=xpW, oH=4;
+    cx.fillStyle='#222';cx.fillRect(xpX,oY,oW,oH);
+    const oPct=Math.min(oDone/oTotal,1);
+    const oG=cx.createLinearGradient(xpX,0,xpX+oW*oPct,0);
+    oG.addColorStop(0,'#CC6600');oG.addColorStop(1,'#FFAA44');
+    cx.fillStyle=oG;cx.fillRect(xpX,oY,oW*oPct,oH);
+    cx.fillStyle='#FFD080';cx.font='bold 7px monospace';
+    cx.fillText('DAG '+oDone+'/'+oTotal,xpX+oW+4,oY+4);
+  }
   cx.restore();
   fr++;
   mainCx.drawImage(buf,0,0);
