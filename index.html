@@ -11,14 +11,14 @@
 <title>에이전트 개발국 ++ (Remote)</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Galmuri11&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --gold:#FFD080;--gold-d:#8B6914;--gold-dd:#5A4008;--bg:#E8D8C0;--panel:#FFF0D0;--text:#2A1B0A;
   --ok:#44AA44;--err:#CC3300;--warn:#CCAA22;--info:#6666CC;--accent:#CC6600;
   --safe:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
 }
-body{font-family:'Galmuri11','Malgun Gothic',monospace;background:#1A1A3A;color:var(--text);overflow:hidden;
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;background:#1A1A3A;color:var(--text);overflow:hidden;
   height:100vh;height:100dvh;user-select:none;-webkit-tap-highlight-color:transparent;
   -webkit-font-smoothing:antialiased;touch-action:manipulation}
 
@@ -633,13 +633,10 @@ function drawAccessory(px,y,type,s,sitting){
 
 function drawNameTag(px,y,c){
   const nm=c.l;
-  cx.font='bold 12px "Galmuri11","Malgun Gothic",sans-serif';cx.textAlign='center';
-  const nw=cx.measureText(nm).width+14;
-  cx.fillStyle='#000';cx.fillRect(px-nw/2-2,y-1,nw+4,20);
-  cx.fillStyle=c.p;cx.fillRect(px-nw/2,y,nw,18);
-  cx.fillStyle='#FFD080';cx.fillRect(px-nw/2,y,nw,2);cx.fillRect(px-nw/2,y+16,nw,2);
-  // Text with outline
-  cx.fillStyle='#000';cx.fillText(nm,px+1,y+14);cx.fillText(nm,px-1,y+14);
+  cx.font='bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';cx.textAlign='center';
+  const nw=cx.measureText(nm).width+12;
+  cx.fillStyle=c.p;cx.fillRect(px-nw/2,y,nw,17);
+  cx.fillStyle='#FFD080';cx.fillRect(px-nw/2,y,nw,1.5);cx.fillRect(px-nw/2,y+15.5,nw,1.5);
   cx.fillStyle='#FFF';cx.fillText(nm,px,y+13);
 }
 
@@ -733,24 +730,19 @@ function drawStatusIcon(x,y,type){
 
 function drawBub(x,y,t){
   const d=t.length>10?t.slice(0,10)+'…':t;
-  cx.font='bold 13px "Galmuri11","Malgun Gothic",sans-serif';
+  cx.font='bold 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
   const tw=cx.measureText(d).width;
-  const w=Math.max(tw+16,40), h=26, r=5;
-  // Shadow
-  cx.fillStyle='#5A400860';cx.fillRect(x-w/2+2,y-h+2,w,h);
-  // Background with rounded feel
+  const w=Math.max(tw+18,44), h=26;
+  // Background
   cx.fillStyle='#FFFFFF';cx.fillRect(x-w/2,y-h,w,h);
-  cx.fillStyle='#FFFDF5';cx.fillRect(x-w/2+1,y-h+1,w-2,h-2);
   // Border
-  cx.strokeStyle='#8B6914';cx.lineWidth=2;cx.strokeRect(x-w/2,y-h,w,h);
-  // Tail triangle
-  cx.fillStyle='#FFFDF5';cx.beginPath();cx.moveTo(x-5,y);cx.lineTo(x+5,y);cx.lineTo(x,y+5);cx.fill();
-  cx.strokeStyle='#8B6914';cx.lineWidth=1.5;cx.beginPath();cx.moveTo(x-5,y);cx.lineTo(x,y+5);cx.lineTo(x+5,y);cx.stroke();
-  // Text with outline for readability
+  cx.strokeStyle='#8B6914';cx.lineWidth=1.5;cx.strokeRect(x-w/2,y-h,w,h);
+  // Tail
+  cx.fillStyle='#FFF';cx.beginPath();cx.moveTo(x-4,y);cx.lineTo(x+4,y);cx.lineTo(x,y+5);cx.fill();
+  cx.strokeStyle='#8B6914';cx.lineWidth=1;cx.beginPath();cx.moveTo(x-4,y);cx.lineTo(x,y+5);cx.lineTo(x+4,y);cx.stroke();
+  // Text
   cx.textAlign='center';cx.textBaseline='middle';
-  cx.fillStyle='#FFF';cx.fillText(d,x-1,y-h/2);cx.fillText(d,x+1,y-h/2);
-  cx.fillText(d,x,y-h/2-1);cx.fillText(d,x,y-h/2+1);
-  cx.fillStyle='#2A1B0A';cx.fillText(d,x,y-h/2);
+  cx.fillStyle='#222';cx.fillText(d,x,y-h/2);
   cx.textBaseline='alphabetic';
 }
 
@@ -871,7 +863,7 @@ function buildBg(w,h){
     g.fillStyle='#1A1A0ADD';g.fillRect(x-dlw/2-1,dy+9.5*s-1,dlw+2,18);
     g.fillStyle=ac.p;g.fillRect(x-dlw/2,dy+9.5*s,dlw,16);
     g.fillStyle=ac.s;g.fillRect(x-dlw/2,dy+9.5*s,dlw,2);
-    g.fillStyle='#FFF';g.font='bold 12px "Malgun Gothic",sans-serif';g.textAlign='center';
+    g.fillStyle='#FFF';g.font='bold 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';g.textAlign='center';
     g.fillText(dl,x,dy+9.5*s+13);
   });
   bg=o;bgW=w;bgH=h;
@@ -1183,7 +1175,7 @@ function render(ts){
   cx.fillStyle='#000000AA';cx.fillRect(4,4,hudW,26);
   cx.fillStyle='#1A1A3A';cx.fillRect(5,5,hudW-2,24);
   cx.fillStyle='#8B6914';cx.fillRect(5,5,hudW-2,2);cx.fillRect(5,27,hudW-2,2);
-  cx.font='bold 14px "Malgun Gothic",sans-serif';cx.textAlign='left';
+  cx.font='bold 14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';cx.textAlign='left';
   if(hudShow>0){
     cx.fillStyle='#FF6644';cx.fillRect(10,11,14,14);
     cx.fillStyle='#FFD080';cx.fillText(hudShow+'명 개발 중',28,23);
@@ -1192,7 +1184,7 @@ function render(ts){
   }
   if(serverMetrics&&serverMetrics.opsPerMin){
     cx.fillStyle='#6688AA';cx.fillRect(134,10,1,16);
-    cx.fillStyle='#88BBDD';cx.font='bold 12px "Malgun Gothic",sans-serif';
+    cx.fillStyle='#88BBDD';cx.font='bold 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
     cx.fillText(serverMetrics.opsPerMin+' ops/m',140,23);
   }
   // Agent online indicator on HUD
@@ -1202,7 +1194,7 @@ function render(ts){
   cx.fillText(agentOnline?'ON':'OFF',w-8,14);
   // Combo display
   if(combo>=2){
-    cx.fillStyle='#FFD080';cx.font='bold 16px "Malgun Gothic",sans-serif';cx.textAlign='center';
+    cx.fillStyle='#FFD080';cx.font='bold 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';cx.textAlign='center';
     const comboY=38+Math.sin(fr*.15)*3;
     cx.fillStyle='#00000080';cx.fillText(combo+'COMBO!',w/2+1,comboY+1);
     cx.fillStyle=combo>=10?'#FF4444':combo>=5?'#FFAA22':'#FFD080';
