@@ -1357,6 +1357,66 @@ function connectWith(url,key,sessionId){
     else{addCombo(false);triggerShake(4)}
   });
 
+  // ── Orchestration Events ──
+  let orchRun=null;
+  channel.on('broadcast',{event:'orch-state'},({payload})=>{
+    orchRun=orchRun||{};
+    orchRun.state=payload.to;orchRun.runId=payload.runId;
+    toast('오케스트레이션: '+payload.to,'in');
+    narr('오케스트레이션 상태: '+payload.from+' → '+payload.to,'sys');
+    updateOrchUI();
+  });
+  channel.on('broadcast',{event:'orch-dag'},({payload})=>{
+    orchRun=orchRun||{};
+    orchRun.dag=payload.dag;orchRun.total=payload.steps;orchRun.done=0;
+    toast('DAG 생성: '+payload.steps+'개 스텝','ok');
+    narr('태스크 분해 완료: '+payload.steps+'개 스텝','agent');
+    for(let i=0;i<Math.min(payload.steps,12);i++)spawnP(cW()*Math.random(),cH()*Math.random(),3,'success');
+    updateOrchUI();
+  });
+  channel.on('broadcast',{event:'orch-step-start'},({payload})=>{
+    toast('실행: '+payload.name,'in');
+    narr(payload.step+': '+payload.name+' ('+payload.executor+')','bash');
+    updateOrchUI();
+  });
+  channel.on('broadcast',{event:'orch-step-done'},({payload})=>{
+    if(payload.success){addCombo(true);spawnP(cW()/2,cH()*.4,6,'success')}
+    else{addCombo(false);triggerShake(3)}
+    updateOrchUI();
+  });
+  channel.on('broadcast',{event:'orch-progress'},({payload})=>{
+    if(orchRun)orchRun.done=payload.done;
+    updateOrchUI();
+  });
+  channel.on('broadcast',{event:'orch-complete'},({payload})=>{
+    orchRun=payload;
+    const ok=payload.status==='done';
+    toast(ok?'오케스트레이션 완료!':'오케스트레이션 실패',ok?'ok':'er');
+    narr('오케스트레이션 '+payload.status+': '+payload.steps?.completed+'/'+payload.steps?.total,'agent');
+    if(ok){for(let i=0;i<15;i++)spawnP(cW()*Math.random(),cH()*Math.random(),4,'success')}
+    else triggerShake(6);
+    updateOrchUI();
+  });
+
+  function updateOrchUI(){
+    const el=document.getElementById('orchInfo');
+    if(!el)return;
+    if(!orchRun){el.style.display='none';return}
+    el.style.display='block';
+    const s=orchRun;
+    let h='<b>오케스트레이션</b> ';
+    if(s.state)h+='<span style="color:var(--'+(s.state==='done'?'ok':s.state==='failed'?'err':'info')+')">'+s.state+'</span> ';
+    if(s.total)h+=(s.done||0)+'/'+s.total+' ';
+    if(s.dag&&s.dag.length>0){
+      h+='<br>';
+      for(const st of s.dag.slice(0,6)){
+        const icon=st.status==='completed'?'<span style="color:var(--ok)">■</span>':st.status==='running'?'<span class="executing">▶</span>':st.status==='failed'?'<span style="color:var(--err)">✕</span>':'<span style="color:var(--gold-d)">○</span>';
+        h+=icon+' '+((st.name||st.id).slice(0,18))+' ';
+      }
+    }
+    el.innerHTML=h;
+  }
+
   // ── Presence ──
   channel.on('presence',{event:'sync'},()=>{
     const state=channel.presenceState();
@@ -1517,6 +1577,8 @@ function rStatHTML(){
     `큐:<b>${lastLaneStats.pending||0}</b> 실행:<b>${lastLaneStats.running||0}</b> 완료:<b>${lastLaneStats.completed||0}</b>${laneAge>90?' <span style="color:var(--err)">('+laneAge+'초 전)</span>':''}`:
     (connected?'<span style="color:var(--warn)">대기 중... (30초 내 업데이트)</span>':'<span style="color:var(--err)">릴레이 오프라인</span>');
   h+=`<div id="laneInfo" style="font-size:11px;color:#8B7860;padding:6px;background:#FFF8E8;border-radius:6px;border-left:3px solid ${lastLaneStats&&lastLaneStats.running>0?'var(--accent)':'transparent'}">${laneDefault}</div>`;
+  // Orchestration
+  h+='<div id="orchInfo" style="font-size:11px;color:#8B7860;padding:6px;margin-top:4px;background:#FFF8E8;border-radius:6px;border-left:3px solid var(--info);display:none"></div>';
   // Combo & XP
   h+='<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">게임 통계</div>';
   h+=`<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:11px">`;
