@@ -632,12 +632,14 @@ function drawAccessory(px,y,type,s,sitting){
 }
 
 function drawNameTag(px,y,c){
-  const nm=c.l, nw=nm.length*14+14;
-  cx.font='bold 14px "Malgun Gothic",sans-serif';cx.textAlign='center';
+  const nm=c.l;
+  cx.font='bold 12px "Galmuri11","Malgun Gothic",sans-serif';cx.textAlign='center';
+  const nw=cx.measureText(nm).width+14;
   cx.fillStyle='#000';cx.fillRect(px-nw/2-2,y-1,nw+4,20);
   cx.fillStyle=c.p;cx.fillRect(px-nw/2,y,nw,18);
   cx.fillStyle='#FFD080';cx.fillRect(px-nw/2,y,nw,2);cx.fillRect(px-nw/2,y+16,nw,2);
-  cx.fillStyle='#000';cx.fillText(nm,px+1,y+14);
+  // Text with outline
+  cx.fillStyle='#000';cx.fillText(nm,px+1,y+14);cx.fillText(nm,px-1,y+14);
   cx.fillStyle='#FFF';cx.fillText(nm,px,y+13);
 }
 
@@ -730,15 +732,26 @@ function drawStatusIcon(x,y,type){
 }
 
 function drawBub(x,y,t){
-  const d=t.length>12?t.slice(0,12)+'…':t;
-  const w=Math.min(d.length*12+18,200), h=28;
-  cx.fillStyle='#5A400880';cx.fillRect(x-w/2+2,y-h+2,w,h);
-  cx.fillStyle='#FFF8E8';cx.fillRect(x-w/2,y-h,w,h);
+  const d=t.length>10?t.slice(0,10)+'…':t;
+  cx.font='bold 13px "Galmuri11","Malgun Gothic",sans-serif';
+  const tw=cx.measureText(d).width;
+  const w=Math.max(tw+16,40), h=26, r=5;
+  // Shadow
+  cx.fillStyle='#5A400860';cx.fillRect(x-w/2+2,y-h+2,w,h);
+  // Background with rounded feel
+  cx.fillStyle='#FFFFFF';cx.fillRect(x-w/2,y-h,w,h);
+  cx.fillStyle='#FFFDF5';cx.fillRect(x-w/2+1,y-h+1,w-2,h-2);
+  // Border
   cx.strokeStyle='#8B6914';cx.lineWidth=2;cx.strokeRect(x-w/2,y-h,w,h);
-  cx.fillStyle='#FFF8E8';cx.fillRect(x-4,y,8,6);
-  cx.font='bold 14px "Malgun Gothic",sans-serif';cx.textAlign='center';
-  cx.fillStyle='#000';cx.fillText(d,x+1,y-h/2+6);
-  cx.fillStyle='#2A1B0A';cx.fillText(d,x,y-h/2+5);
+  // Tail triangle
+  cx.fillStyle='#FFFDF5';cx.beginPath();cx.moveTo(x-5,y);cx.lineTo(x+5,y);cx.lineTo(x,y+5);cx.fill();
+  cx.strokeStyle='#8B6914';cx.lineWidth=1.5;cx.beginPath();cx.moveTo(x-5,y);cx.lineTo(x,y+5);cx.lineTo(x+5,y);cx.stroke();
+  // Text with outline for readability
+  cx.textAlign='center';cx.textBaseline='middle';
+  cx.fillStyle='#FFF';cx.fillText(d,x-1,y-h/2);cx.fillText(d,x+1,y-h/2);
+  cx.fillText(d,x,y-h/2-1);cx.fillText(d,x,y-h/2+1);
+  cx.fillStyle='#2A1B0A';cx.fillText(d,x,y-h/2);
+  cx.textBaseline='alphabetic';
 }
 
 // ── BACKGROUND CACHE ──
