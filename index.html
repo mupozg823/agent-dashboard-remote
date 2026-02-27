@@ -347,6 +347,40 @@ function drawSparkSvg(data,color,w,h){
   return`<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
 }
 
+// ── Combo & Achievement System ──
+let combo=0, maxCombo=0, comboTimer=null, totalXP=0, achievements=[];
+const ACHIEVEMENTS=[
+  {id:'first',name:'첫 번째 작업',desc:'첫 도구 실행',cond:()=>entries.length>=1},
+  {id:'combo5',name:'콤보 5!',desc:'5연속 성공',cond:()=>maxCombo>=5},
+  {id:'combo10',name:'콤보 마스터',desc:'10연속 성공',cond:()=>maxCombo>=10},
+  {id:'ops50',name:'50작업 돌파',desc:'총 50회 도구 실행',cond:()=>entries.length>=50},
+  {id:'ops100',name:'백전노장',desc:'총 100회 도구 실행',cond:()=>entries.length>=100},
+  {id:'deny0',name:'무결점',desc:'차단 0으로 50작업',cond:()=>entries.length>=50&&entries.filter(e=>e.decision==='deny').length===0},
+  {id:'alltools',name:'만능 도구',desc:'5종류 이상 도구 사용',cond:()=>new Set(entries.map(e=>e.tool).filter(Boolean)).size>=5},
+  {id:'night',name:'야간 근무',desc:'밤 10시 이후 작업',cond:()=>new Date().getHours()>=22},
+];
+function checkAchievements(){
+  for(const a of ACHIEVEMENTS){
+    if(!achievements.includes(a.id)&&a.cond()){
+      achievements.push(a.id);
+      toast('업적 달성: '+a.name+'!','ok');
+      spawnP(cW()/2,cH()/2,12,'success');
+      narr('업적 달성! '+a.name+' - '+a.desc,'agent');
+    }
+  }
+}
+function addCombo(success){
+  if(success){combo++;if(combo>maxCombo)maxCombo=combo;
+    clearTimeout(comboTimer);comboTimer=setTimeout(()=>{combo=0},5000);
+    totalXP+=10+combo*2;
+    if(combo>=5&&combo%5===0){toast(combo+'콤보!','ok');spawnP(cW()/2,cH()*.4,6+combo,'success')}
+  }else{combo=0}
+  checkAchievements();
+}
+
+// ── Tick Liveness ──
+let lastTick=0, relayUptime=0;
+
 // Characters - real dev agent names
 const C={
   bash:{h:'#6644CC',s:'#4834D4',p:'#2A1B6A',l:'Shell',r:'명령실행',e:'$_',emoji:'🖥'},
@@ -1153,6 +1187,21 @@ function render(ts){
   cx.fillRect(w-24,8,6,6);cx.fillStyle='#FFF';
   cx.font='8px monospace';cx.textAlign='right';
   cx.fillText(agentOnline?'ON':'OFF',w-8,14);
+  // Combo display
+  if(combo>=2){
+    cx.fillStyle='#FFD080';cx.font='bold 16px "Malgun Gothic",sans-serif';cx.textAlign='center';
+    const comboY=38+Math.sin(fr*.15)*3;
+    cx.fillStyle='#00000080';cx.fillText(combo+'COMBO!',w/2+1,comboY+1);
+    cx.fillStyle=combo>=10?'#FF4444':combo>=5?'#FFAA22':'#FFD080';
+    cx.fillText(combo+'COMBO!',w/2,comboY);
+  }
+  // XP bar at bottom of HUD
+  const xpW=80,xpH=4,xpX=5,xpY=30;
+  cx.fillStyle='#333';cx.fillRect(xpX,xpY,xpW,xpH);
+  const xpPct=Math.min((totalXP%500)/500,1);
+  cx.fillStyle='#6666CC';cx.fillRect(xpX,xpY,xpW*xpPct,xpH);
+  cx.fillStyle='#AAA';cx.font='7px monospace';cx.textAlign='left';
+  cx.fillText('XP:'+totalXP,xpX+xpW+4,xpY+4);
   cx.restore();
   fr++;
   mainCx.drawImage(buf,0,0);
@@ -1220,6 +1269,21 @@ function connectWith(url,key,sessionId){
   // ── Metrics ──
   channel.on('broadcast',{event:'metrics'},({payload})=>{
     serverMetrics=payload;sUI();
+  });
+
+  // ── Tick Liveness (OpenClaw pattern) ──
+  channel.on('broadcast',{event:'tick'},({payload})=>{
+    lastTick=Date.now();relayUptime=payload.uptime||0;
+    const sig=document.getElementById('sig');
+    if(sig)sig.className='signal'; // full bars on tick
+  });
+
+  // ── Lane Stats ──
+  channel.on('broadcast',{event:'lane-stats'},({payload})=>{
+    if(payload&&!payload.error){
+      const el=document.getElementById('laneInfo');
+      if(el)el.textContent=`큐:${payload.pending||0} 실행:${payload.running||0} 완료:${payload.completed||0}`;
+    }
   });
 
   // ── Command Ack/Result ──
@@ -1293,13 +1357,13 @@ function onE(e){
   if(e.decision==='deny'){
     narr(pick(NR.deny),'agent');
     spawnP(cW()/2,cH()*.3,6,'error');
-    triggerShake(4);
+    triggerShake(4);addCombo(false);
     toast('차단: '+(e.cmd||e.tool||'').slice(0,30),'er');
   }else if(e.err){
     spawnP(DESKS[ai].x*cW(),cH()*.5,4,'error');
-    const p=NR[e.tool]||NR.idle;narr(pick(p),AT[ai]);
+    const p=NR[e.tool]||NR.idle;narr(pick(p),AT[ai]);addCombo(false);
   }else{
-    const p=NR[e.tool]||NR.idle;narr(pick(p),AT[ai]);
+    const p=NR[e.tool]||NR.idle;narr(pick(p),AT[ai]);addCombo(true);
   }
 }
 
@@ -1383,6 +1447,22 @@ function rStatHTML(){
     h+=`<div class="sb"><span class="n">${n}</span><div class="b"><div class="f" style="width:${(v/gmx*100)|0}%;background:${co}"></div></div><span class="v">${v}</span></div>`;
   });
   h+=`<div style="font-size:10px;color:#8B7860;margin-top:8px;padding:6px;background:#FFF8E8;border-radius:6px">총 <b>${total}</b> | 에러 <b>${errs}</b> | 차단 <b>${blocks}</b>${sessions?' | '+sessions+'세션':''}${durMin?' | '+durMin+'분':''}</div>`;
+  // Lane Queue info
+  h+='<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">Lane Queue</div>';
+  h+=`<div id="laneInfo" style="font-size:11px;color:#8B7860;padding:6px;background:#FFF8E8;border-radius:6px">상태 로딩 중...</div>`;
+  // Combo & XP
+  h+='<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">게임 통계</div>';
+  h+=`<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:11px">`;
+  h+=`<div>현재 콤보: <b style="color:${combo>=5?'var(--err)':'var(--accent)'">${combo}</b> | 최대: <b>${maxCombo}</b></div>`;
+  h+=`<div>총 XP: <b style="color:var(--info)">${totalXP}</b></div>`;
+  h+=`<div style="margin-top:4px">업적: ${achievements.length}/${ACHIEVEMENTS.length}</div>`;
+  achievements.forEach(id=>{const a=ACHIEVEMENTS.find(x=>x.id===id);if(a)h+=`<div style="font-size:9px;color:var(--ok);margin-top:2px">✓ ${a.name}</div>`});
+  h+=`</div>`;
+  // Relay uptime
+  if(relayUptime>0){
+    const um=Math.floor(relayUptime/60),us=relayUptime%60;
+    h+=`<div style="font-size:10px;color:#8B7860;margin-top:6px">릴레이 업타임: ${um}분 ${us}초</div>`;
+  }
   return h;
 }
 
@@ -1472,6 +1552,16 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
 
 // ── Idle narration ──
 setInterval(()=>{if(Date.now()-lastET>12000)narr(pick(NR.idle))},8000);
+
+// ── Tick liveness monitor (signal degrades without ticks) ──
+setInterval(()=>{
+  if(!connected)return;
+  const sig=document.getElementById('sig');if(!sig)return;
+  const elapsed=Date.now()-lastTick;
+  if(lastTick===0||elapsed<70000)sig.className='signal'; // full
+  else if(elapsed<130000)sig.className='signal mid';
+  else sig.className='signal weak';
+},10000);
 
 // ── Canvas Touch Support (improved hit detection) ──
 document.getElementById('c').addEventListener('touchstart',(e)=>{
