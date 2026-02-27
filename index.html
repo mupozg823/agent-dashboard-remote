@@ -162,7 +162,7 @@ canvas{display:block;width:100%;height:100%}
 .cmd-entry{padding:6px 8px;margin-bottom:3px;border-radius:6px;border-left:4px solid var(--info);background:#FFF8E8;font-size:11px}
 .cmd-entry .ct{color:var(--accent);font-weight:bold}
 .cmd-entry .cs{font-size:9px;margin-left:4px}
-.cmd-entry .cs.queued{color:var(--ok)}.cmd-entry .cs.rejected{color:var(--err)}.cmd-entry .cs.pending{color:var(--warn)}
+.cmd-entry .cs.queued{color:var(--ok)}.cmd-entry .cs.rejected{color:var(--err)}.cmd-entry .cs.pending{color:var(--warn)}.cmd-entry .cs.executing{color:var(--accent);animation:pulse 1s infinite}
 
 /* ── FAB (Floating Action Button) ── */
 .fab{position:fixed;bottom:calc(60px + var(--safe));right:12px;width:52px;height:52px;border-radius:50%;
@@ -378,8 +378,8 @@ function addCombo(success){
   checkAchievements();
 }
 
-// ── Tick Liveness ──
-let lastTick=0, relayUptime=0;
+// ── Tick Liveness & Lane Stats ──
+let lastTick=0, relayUptime=0, lastLaneStats=null, lastLaneStatsTime=0;
 
 // Characters - real dev agent names
 const C={
@@ -633,11 +633,18 @@ function drawAccessory(px,y,type,s,sitting){
 
 function drawNameTag(px,y,c){
   const nm=c.l;
-  cx.font='bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';cx.textAlign='center';
-  const nw=cx.measureText(nm).width+12;
-  cx.fillStyle=c.p;cx.fillRect(px-nw/2,y,nw,17);
-  cx.fillStyle='#FFD080';cx.fillRect(px-nw/2,y,nw,1.5);cx.fillRect(px-nw/2,y+15.5,nw,1.5);
-  cx.fillStyle='#FFF';cx.fillText(nm,px,y+13);
+  cx.font='bold 10px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';cx.textAlign='center';
+  const nw=cx.measureText(nm).width+10;
+  // Rounded tag background
+  const tx=px-nw/2, ty=y, th=15;
+  cx.fillStyle=c.p+'DD';
+  cx.beginPath();const r2=3;
+  cx.moveTo(tx+r2,ty);cx.lineTo(tx+nw-r2,ty);cx.arc(tx+nw-r2,ty+r2,r2,-Math.PI/2,0);
+  cx.lineTo(tx+nw,ty+th-r2);cx.arc(tx+nw-r2,ty+th-r2,r2,0,Math.PI/2);
+  cx.lineTo(tx+r2,ty+th);cx.arc(tx+r2,ty+th-r2,r2,Math.PI/2,Math.PI);
+  cx.lineTo(tx,ty+r2);cx.arc(tx+r2,ty+r2,r2,Math.PI,3*Math.PI/2);
+  cx.fill();
+  cx.fillStyle='#FFF';cx.fillText(nm,px,y+11.5);
 }
 
 // ── Work effects ──
@@ -729,20 +736,27 @@ function drawStatusIcon(x,y,type){
 }
 
 function drawBub(x,y,t){
-  const d=t.length>10?t.slice(0,10)+'…':t;
-  cx.font='bold 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+  const d=t.length>12?t.slice(0,12)+'…':t;
+  cx.font='bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';
   const tw=cx.measureText(d).width;
-  const w=Math.max(tw+18,44), h=26;
-  // Background
-  cx.fillStyle='#FFFFFF';cx.fillRect(x-w/2,y-h,w,h);
+  const w=Math.max(tw+16,40), h=22;
+  const bx=x-w/2, by=y-h;
+  // Background with rounded corners
+  cx.fillStyle='#FFF8E8';
+  cx.beginPath();const r=5;
+  cx.moveTo(bx+r,by);cx.lineTo(bx+w-r,by);cx.arc(bx+w-r,by+r,r,-Math.PI/2,0);
+  cx.lineTo(bx+w,by+h-r);cx.arc(bx+w-r,by+h-r,r,0,Math.PI/2);
+  cx.lineTo(bx+r,by+h);cx.arc(bx+r,by+h-r,r,Math.PI/2,Math.PI);
+  cx.lineTo(bx,by+r);cx.arc(bx+r,by+r,r,Math.PI,3*Math.PI/2);
+  cx.fill();
   // Border
-  cx.strokeStyle='#8B6914';cx.lineWidth=1.5;cx.strokeRect(x-w/2,y-h,w,h);
+  cx.strokeStyle='#C8A882';cx.lineWidth=1.5;cx.stroke();
   // Tail
-  cx.fillStyle='#FFF';cx.beginPath();cx.moveTo(x-4,y);cx.lineTo(x+4,y);cx.lineTo(x,y+5);cx.fill();
-  cx.strokeStyle='#8B6914';cx.lineWidth=1;cx.beginPath();cx.moveTo(x-4,y);cx.lineTo(x,y+5);cx.lineTo(x+4,y);cx.stroke();
+  cx.fillStyle='#FFF8E8';cx.beginPath();cx.moveTo(x-3,y);cx.lineTo(x+3,y);cx.lineTo(x,y+4);cx.fill();
+  cx.strokeStyle='#C8A882';cx.lineWidth=1;cx.beginPath();cx.moveTo(x-3,y);cx.lineTo(x,y+4);cx.lineTo(x+3,y);cx.stroke();
   // Text
   cx.textAlign='center';cx.textBaseline='middle';
-  cx.fillStyle='#222';cx.fillText(d,x,y-h/2);
+  cx.fillStyle='#2A1B0A';cx.fillText(d,x,y-h/2);
   cx.textBaseline='alphabetic';
 }
 
@@ -1007,7 +1021,9 @@ class Ag{
     if(this.compFx>0)this.compFx--;
     if(this.st==='walk'){
       const dx=this.tx-this.x,dy=this.ty-this.y;
-      if(Math.hypot(dx,dy)>.004){this.x+=dx*.06;this.y+=dy*.06;this.d=dx>0?1:-1;this.wf++}
+      // Speed scales with opsPerMin: base .06, up to .12 when busy
+      const spd=.06+Math.min(.06,(serverMetrics&&serverMetrics.opsPerMin||0)/100*.06);
+      if(Math.hypot(dx,dy)>.004){this.x+=dx*spd;this.y+=dy*spd;this.d=dx>0?1:-1;this.wf++}
       else{this.st=this.di>=0?'work':'idle';this.d=1}
     }else if(this.st==='work'){
       this.wt--;
@@ -1113,6 +1129,7 @@ function getDayPhase(){
   if(h>=6&&h<10)return'morning';if(h>=10&&h<17)return'day';
   if(h>=17&&h<20)return'evening';return'night';
 }
+let thunderFlash=0;
 function drawWeather(w,h){
   const weather=getWeather(),phase=getDayPhase();
   // Day/night tint overlay
@@ -1124,12 +1141,23 @@ function drawWeather(w,h){
     for(let i=0;i<3;i++){
       weatherParticles.push({x:Math.random()*w,y:-5,vx:-.5,vy:4+Math.random()*3,l:h/4+Math.random()*20,type:'rain'});
     }
+    // Thunder flash on high error rate
+    if(Math.random()<.008&&thunderFlash<=0){thunderFlash=6;triggerShake(2)}
+  }else if(weather==='cloudy'){
+    // Drifting clouds
+    if(Math.random()<.005){
+      weatherParticles.push({x:-40,y:10+Math.random()*h*.15,vx:.3+Math.random()*.2,vy:0,l:300,type:'cloud',sz:30+Math.random()*30});
+    }
   }else if(weather==='sunny'&&Math.random()<.02){
     weatherParticles.push({x:Math.random()*w,y:Math.random()*h*.3,vx:0,vy:0,l:40+Math.random()*30,type:'sparkle',r:Math.random()*6.28});
   }
+  // Thunder flash overlay
+  if(thunderFlash>0){
+    cx.fillStyle=`rgba(255,255,255,${thunderFlash/10})`;cx.fillRect(0,0,w,h);thunderFlash--;
+  }
   weatherParticles=weatherParticles.filter(p=>{
     p.x+=p.vx||0;p.y+=p.vy||0;p.l--;
-    if(p.l<=0||p.y>h)return false;
+    if(p.l<=0||p.y>h||p.x>w+60)return false;
     if(p.type==='rain'){
       cx.globalAlpha=.25;cx.fillStyle='#6688CC';
       cx.fillRect(p.x,p.y,1,6);cx.globalAlpha=1;
@@ -1137,6 +1165,12 @@ function drawWeather(w,h){
       p.r+=.05;cx.globalAlpha=Math.min(p.l/20,.4);cx.fillStyle='#FFE8B0';
       cx.fillRect(p.x+Math.cos(p.r)*2-1,p.y-1,2,2);
       cx.fillRect(p.x-1,p.y+Math.sin(p.r)*2-1,2,2);
+      cx.globalAlpha=1;
+    }else if(p.type==='cloud'){
+      cx.globalAlpha=.12;cx.fillStyle='#8899AA';
+      const sz=p.sz;
+      cx.beginPath();cx.arc(p.x,p.y,sz*.4,0,6.28);cx.arc(p.x+sz*.3,p.y-sz*.15,sz*.35,0,6.28);
+      cx.arc(p.x+sz*.6,p.y,sz*.3,0,6.28);cx.fill();
       cx.globalAlpha=1;
     }
     return true;
@@ -1194,11 +1228,16 @@ function render(ts){
   cx.fillText(agentOnline?'ON':'OFF',w-8,14);
   // Combo display
   if(combo>=2){
-    cx.fillStyle='#FFD080';cx.font='bold 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';cx.textAlign='center';
+    const comboSize=combo>=10?20:combo>=5?18:16;
+    cx.font=`bold ${comboSize}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;cx.textAlign='center';
     const comboY=38+Math.sin(fr*.15)*3;
+    const comboColor=combo>=10?'#FF4444':combo>=5?'#FFAA22':'#FFD080';
     cx.fillStyle='#00000080';cx.fillText(combo+'COMBO!',w/2+1,comboY+1);
-    cx.fillStyle=combo>=10?'#FF4444':combo>=5?'#FFAA22':'#FFD080';
-    cx.fillText(combo+'COMBO!',w/2,comboY);
+    cx.fillStyle=comboColor;cx.fillText(combo+'COMBO!',w/2,comboY);
+    // Fire particles for 10+ combo
+    if(combo>=10&&fr%3===0){
+      spawnP(w/2+(Math.random()-.5)*60,comboY,1,'success');
+    }
   }
   // XP bar at bottom of HUD
   const xpW=80,xpH=4,xpX=5,xpY=30;
@@ -1286,9 +1325,24 @@ function connectWith(url,key,sessionId){
   // ── Lane Stats ──
   channel.on('broadcast',{event:'lane-stats'},({payload})=>{
     if(payload&&!payload.error){
+      lastLaneStats=payload;lastLaneStatsTime=Date.now();
       const el=document.getElementById('laneInfo');
-      if(el)el.textContent=`큐:${payload.pending||0} 실행:${payload.running||0} 완료:${payload.completed||0}`;
+      if(el){
+        const locked=payload.locked?'🔒':'';
+        const failed=payload.failed?` 실패:${payload.failed}`:'';
+        el.innerHTML=`${locked}큐:<b>${payload.pending||0}</b> 실행:<b>${payload.running||0}</b> 완료:<b>${payload.completed||0}</b>${failed}`;
+        el.style.borderLeft=payload.running>0?'3px solid var(--accent)':'3px solid transparent';
+      }
     }
+  });
+
+  // ── Lane Executing (command about to run) ──
+  channel.on('broadcast',{event:'lane-executing'},({payload})=>{
+    const cmd=cmdHistory.find(c=>c.id===payload.id);
+    if(cmd){cmd.status='executing';renderCmdHist()}
+    toast('실행 중: '+((payload.command||'').slice(0,30)),'in');
+    narr('명령 실행 시작: '+(payload.command||''),'bash');
+    spawnP(cW()/2,cH()/2,6,'success');
   });
 
   // ── Command Ack/Result ──
@@ -1299,6 +1353,8 @@ function connectWith(url,key,sessionId){
   channel.on('broadcast',{event:'command-result'},({payload})=>{
     updateCmdResult(payload.id,payload.result,payload.exitCode);
     toast(payload.exitCode===0?'명령 완료':'명령 실패 (code '+payload.exitCode+')',payload.exitCode===0?'ok':'er');
+    if(payload.exitCode===0){addCombo(true);spawnP(cW()/2,cH()*.3,8,'success')}
+    else{addCombo(false);triggerShake(4)}
   });
 
   // ── Presence ──
@@ -1369,6 +1425,8 @@ function onE(e){
     const p=NR[e.tool]||NR.idle;narr(pick(p),AT[ai]);addCombo(false);
   }else{
     const p=NR[e.tool]||NR.idle;narr(pick(p),AT[ai]);addCombo(true);
+    // Success particle at agent desk
+    spawnP(DESKS[ai].x*cW(),cH()*.5,2+(combo>5?3:0),'success');
   }
 }
 
@@ -1454,7 +1512,11 @@ function rStatHTML(){
   h+=`<div style="font-size:10px;color:#8B7860;margin-top:8px;padding:6px;background:#FFF8E8;border-radius:6px">총 <b>${total}</b> | 에러 <b>${errs}</b> | 차단 <b>${blocks}</b>${sessions?' | '+sessions+'세션':''}${durMin?' | '+durMin+'분':''}</div>`;
   // Lane Queue info
   h+='<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">Lane Queue</div>';
-  h+=`<div id="laneInfo" style="font-size:11px;color:#8B7860;padding:6px;background:#FFF8E8;border-radius:6px">상태 로딩 중...</div>`;
+  const laneAge=lastLaneStatsTime?Math.floor((Date.now()-lastLaneStatsTime)/1000):999;
+  const laneDefault=lastLaneStats?
+    `큐:<b>${lastLaneStats.pending||0}</b> 실행:<b>${lastLaneStats.running||0}</b> 완료:<b>${lastLaneStats.completed||0}</b>${laneAge>90?' <span style="color:var(--err)">('+laneAge+'초 전)</span>':''}`:
+    (connected?'<span style="color:var(--warn)">대기 중... (30초 내 업데이트)</span>':'<span style="color:var(--err)">릴레이 오프라인</span>');
+  h+=`<div id="laneInfo" style="font-size:11px;color:#8B7860;padding:6px;background:#FFF8E8;border-radius:6px;border-left:3px solid ${lastLaneStats&&lastLaneStats.running>0?'var(--accent)':'transparent'}">${laneDefault}</div>`;
   // Combo & XP
   h+='<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">게임 통계</div>';
   h+=`<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:11px">`;
@@ -1495,8 +1557,9 @@ function rCmdHTML(){
   h+='</div>';
   h+='<div id="cmdHist" class="cmd-hist">';
   h+=cmdHistory.slice(0,30).map(c=>{
-    const stCls=c.status==='queued'||c.status==='completed'?'queued':c.status==='rejected'||c.status==='failed'?'rejected':'pending';
-    return`<div class="cmd-entry"><span class="ct">${esc(c.command)}</span><span class="cs ${stCls}">${c.status}${c.reason?' : '+esc(c.reason):''}</span><br><span style="color:#8B7860;font-size:9px">${c.ts.toLocaleTimeString('ko-KR')}</span>${c.result?'<div style="margin-top:3px;padding:4px 6px;background:var(--panel);border:1px solid #D4B896;border-radius:4px;font-size:10px;max-height:80px;overflow:auto;white-space:pre-wrap">'+esc(String(c.result))+'</div>':''}</div>`;
+    const stCls=c.status==='completed'?'queued':c.status==='queued'?'queued':c.status==='executing'?'executing':c.status==='rejected'||c.status==='failed'?'rejected':'pending';
+    const statusIcon=c.status==='executing'?'⚙️ ':c.status==='completed'?'✅ ':c.status==='failed'?'❌ ':c.status==='queued'?'📋 ':'⏳ ';
+    return`<div class="cmd-entry"><span class="ct">${statusIcon}${esc(c.command)}</span><span class="cs ${stCls}">${c.status}${c.reason?' : '+esc(c.reason):''}</span><br><span style="color:#8B7860;font-size:9px">${c.ts.toLocaleTimeString('ko-KR')}</span>${c.result?'<div style="margin-top:3px;padding:4px 6px;background:var(--panel);border:1px solid #D4B896;border-radius:4px;font-size:10px;max-height:80px;overflow:auto;white-space:pre-wrap">'+esc(String(c.result))+'</div>':''}</div>`;
   }).join('');
   h+='</div></div>';
   return h;
@@ -1547,8 +1610,9 @@ function renderCmdHist(){
   document.getElementById('cmdCount').textContent=cmdHistory.length;
   const el=document.getElementById('cmdHist');
   el.innerHTML=cmdHistory.slice(0,30).map(c=>{
-    const stCls=c.status==='queued'||c.status==='completed'?'queued':c.status==='rejected'||c.status==='failed'?'rejected':'pending';
-    return`<div class="cmd-entry"><span class="ct">${esc(c.command)}</span><span class="cs ${stCls}">${c.status}${c.reason?' : '+esc(c.reason):''}</span><br><span style="color:#8B7860;font-size:9px">${c.ts.toLocaleTimeString('ko-KR')}</span>${c.result?'<div style="margin-top:2px;padding:2px 4px;background:#FFF0D0;border:1px solid #D4B896;border-radius:2px;font-size:9px;max-height:60px;overflow:auto;white-space:pre-wrap">'+esc(String(c.result))+'</div>':''}</div>`
+    const stCls=c.status==='completed'?'queued':c.status==='queued'?'queued':c.status==='executing'?'executing':c.status==='rejected'||c.status==='failed'?'rejected':'pending';
+    const statusIcon=c.status==='executing'?'⚙️ ':c.status==='completed'?'✅ ':c.status==='failed'?'❌ ':c.status==='queued'?'📋 ':'⏳ ';
+    return`<div class="cmd-entry"><span class="ct">${statusIcon}${esc(c.command)}</span><span class="cs ${stCls}">${c.status}${c.reason?' : '+esc(c.reason):''}</span><br><span style="color:#8B7860;font-size:9px">${c.ts.toLocaleTimeString('ko-KR')}</span>${c.result?'<div style="margin-top:2px;padding:2px 4px;background:#FFF0D0;border:1px solid #D4B896;border-radius:2px;font-size:9px;max-height:60px;overflow:auto;white-space:pre-wrap">'+esc(String(c.result))+'</div>':''}</div>`
   }).join('');
 }
 
