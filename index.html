@@ -175,9 +175,10 @@ canvas{display:block;width:100%;height:100%}
 
 /* ── Setup Overlay ── */
 .setup-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:#1A1A3Af0;z-index:200;
-  display:flex;align-items:center;justify-content:center;padding:16px}
+  display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
 .setup-box{background:var(--panel);border:3px solid var(--gold-d);border-radius:12px;
-  box-shadow:4px 4px 0 var(--gold-dd);padding:24px;max-width:380px;width:100%}
+  box-shadow:4px 4px 0 var(--gold-dd);padding:20px;max-width:380px;width:100%;
+  max-height:90vh;overflow-y:auto;margin:auto}
 .setup-box h2{color:var(--gold-dd);font-size:16px;margin-bottom:16px;text-align:center}
 .setup-box label{display:block;font-size:11px;color:#8B7860;margin:12px 0 4px;font-weight:bold}
 .setup-box input{width:100%;padding:10px 12px;background:#FFF8E8;color:var(--text);border:2px solid #C8A882;
@@ -1388,9 +1389,11 @@ function render(ts){
 
 function getParams(){
   const p=new URLSearchParams(location.search);
+  const DEF_URL='https://cdiptfmagemjfmsuphaj.supabase.co';
+  const DEF_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkaXB0Zm1hZ2VtamZtc3VwaGFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjQyMTIsImV4cCI6MjA4NDE0MDIxMn0.mOulQy84XNc7dBQWbC4GlAKkx-9cWOcSgzYWi_tLuHU';
   return {
-    url: p.get('url') || localStorage.getItem('sb_url') || '',
-    key: p.get('key') || localStorage.getItem('sb_key') || '',
+    url: p.get('url') || localStorage.getItem('sb_url') || DEF_URL,
+    key: p.get('key') || localStorage.getItem('sb_key') || DEF_KEY,
     session: p.get('session') || localStorage.getItem('sb_session') || '',
   };
 }
