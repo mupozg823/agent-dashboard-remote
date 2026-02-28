@@ -1735,7 +1735,7 @@ function rStatHTML(){
   // Combo & XP
   h+='<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">게임 통계</div>';
   h+=`<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:11px">`;
-  h+=`<div>현재 콤보: <b style="color:${combo>=5?'var(--err)':'var(--accent)'">${combo}</b> | 최대: <b>${maxCombo}</b></div>`;
+  h+=`<div>현재 콤보: <b style="color:${combo>=5?'var(--err)':'var(--accent)'}">${combo}</b> | 최대: <b>${maxCombo}</b></div>`;
   h+=`<div>총 XP: <b style="color:var(--info)">${totalXP}</b></div>`;
   h+=`<div style="margin-top:4px">업적: ${achievements.length}/${ACHIEVEMENTS.length}</div>`;
   achievements.forEach(id=>{const a=ACHIEVEMENTS.find(x=>x.id===id);if(a)h+=`<div style="font-size:9px;color:var(--ok);margin-top:2px">✓ ${a.name}</div>`});
