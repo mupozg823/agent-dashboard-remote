@@ -638,7 +638,7 @@ const GROUP_COLORS = {
 };
 const MAX_AUDIT = 2000;
 let _evtCount = 0;
-function _evt() { _evtCount++; const el = document.getElementById('evtCounter'); if(el) el.textContent = _evtCount + ' evt'; }
+function _evt() { _evtCount++; const el = document.getElementById('evtCounter'); if(el) el.textContent = _evtCount + ' evt'; document.title = 'Ops [' + _evtCount + ']'; }
 const SPARKLINE_POINTS = 30;
 const MAX_QUEUE_HISTORY = 20;
 
@@ -791,17 +791,23 @@ function connectWith(url, key, sessionId) {
     store.agentOnline = agents.length > 0;
   });
 
-  channel.subscribe(async (status) => {
-    console.log('[ops-dash] subscribe status:', status);
-    if (status === 'SUBSCRIBED') {
+  channel.subscribe(async (st) => {
+    console.log('[ops-dash] subscribe:', st);
+    document.getElementById('lastUpdate').textContent = 'ch:' + st;
+    if (st === 'SUBSCRIBED') {
       store.connected = true;
       reconnectAttempts = 0;
-      await channel.track({ role: 'dashboard-ops', online_at: new Date().toISOString() });
-      // Request initial status
-      channel.send({ type: 'broadcast', event: 'status-request', payload: {} });
-    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      try {
+        await channel.track({ role: 'dashboard-ops', online_at: new Date().toISOString() });
+      } catch(e) { console.warn('track error:', e); }
+      try {
+        channel.send({ type: 'broadcast', event: 'status-request', payload: {} });
+      } catch(e) { console.warn('send error:', e); }
+    } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') {
       store.connected = false;
       scheduleReconnect();
+    } else if (st === 'CLOSED') {
+      store.connected = false;
     }
   });
 }
