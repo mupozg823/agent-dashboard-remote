@@ -1350,6 +1350,147 @@ function drawOrchHUD(w,h){
 }
 
 // ══════════════════════════════════════════
+// ── PHASE 3 VISUAL EFFECTS ──
+// ══════════════════════════════════════════
+
+function drawGlobalLaneGauge(cx, w, h) {
+  if (!S.globalLane) return;
+  const gl = S.globalLane;
+  const max = gl.maxConcurrent || 3;
+  const running = gl.currentRunning || 0;
+
+  // Draw at top-right corner
+  const gx = w - 50, gy = 6;
+  const gw = 44, gh = 8;
+
+  // Background
+  cx.fillStyle = '#00000060';
+  cx.fillRect(gx - 1, gy - 1, gw + 2, gh + 2);
+
+  // Bar segments
+  for (let i = 0; i < max; i++) {
+    const sx = gx + (gw / max) * i + 1;
+    const sw = gw / max - 2;
+    cx.fillStyle = i < running ?
+      (running >= max ? '#FF4444' : running >= max - 1 ? '#FFAA00' : '#44DD66') :
+      '#333333';
+    cx.fillRect(sx, gy, sw, gh);
+  }
+
+  // Label
+  cx.fillStyle = '#FFFFFFCC';
+  cx.font = '7px monospace';
+  cx.textAlign = 'right';
+  cx.fillText(`Lane ${running}/${max}`, gx - 3, gy + gh - 1);
+  cx.textAlign = 'left';
+}
+
+function drawSteerFx(cx, w, h) {
+  if (!S.lastSteer) return;
+  const age = Date.now() - new Date(S.lastSteer.ts).getTime();
+  if (age > 2000) return; // Show for 2 seconds
+
+  const alpha = Math.max(0, 1 - age / 2000);
+  const mode = S.lastSteer.mode || 'steer';
+
+  // Flash border based on mode
+  const color = mode === 'replace' ? `rgba(255,50,50,${alpha * 0.4})` :
+                mode === 'followup' ? `rgba(255,170,0,${alpha * 0.4})` :
+                `rgba(68,170,255,${alpha * 0.4})`;
+
+  cx.strokeStyle = color;
+  cx.lineWidth = 3;
+  cx.strokeRect(2, 2, w - 4, h - 4);
+
+  // Arrow indicator
+  const arrowX = w / 2, arrowY = h * 0.15;
+  cx.save();
+  cx.translate(arrowX, arrowY);
+  cx.rotate(Math.sin(age * 0.01) * 0.3);
+  cx.fillStyle = color.replace(String(alpha * 0.4), String(alpha * 0.8));
+  // Draw curved arrow
+  cx.beginPath();
+  cx.moveTo(-12, -2);
+  cx.lineTo(0, -8);
+  cx.lineTo(12, -2);
+  cx.lineTo(6, -2);
+  cx.lineTo(6, 6);
+  cx.lineTo(-6, 6);
+  cx.lineTo(-6, -2);
+  cx.closePath();
+  cx.fill();
+  cx.restore();
+
+  // Mode text
+  cx.fillStyle = `rgba(255,255,255,${alpha})`;
+  cx.font = 'bold 9px monospace';
+  cx.textAlign = 'center';
+  const modeText = mode === 'replace' ? 'REPLACE' : mode === 'followup' ? 'FOLLOWUP' : 'STEER';
+  cx.fillText(modeText, w / 2, h * 0.15 + 16);
+  cx.textAlign = 'left';
+}
+
+function drawCronIndicator(cx, w, h) {
+  if (!S.lastCronFire) return;
+  const age = Date.now() - new Date(S.lastCronFire.ts).getTime();
+  if (age > 3000) return;
+
+  const alpha = Math.max(0, 1 - age / 3000);
+  const x = w - 25, y = 20;
+
+  // Clock icon
+  cx.save();
+  cx.globalAlpha = alpha;
+  cx.strokeStyle = '#FFD700';
+  cx.lineWidth = 1.5;
+  cx.beginPath();
+  cx.arc(x, y, 8, 0, Math.PI * 2);
+  cx.stroke();
+
+  // Clock hands
+  const angle1 = (age * 0.005) % (Math.PI * 2);
+  const angle2 = (age * 0.0005) % (Math.PI * 2);
+  cx.beginPath();
+  cx.moveTo(x, y);
+  cx.lineTo(x + Math.sin(angle1) * 5, y - Math.cos(angle1) * 5);
+  cx.stroke();
+  cx.beginPath();
+  cx.moveTo(x, y);
+  cx.lineTo(x + Math.sin(angle2) * 3.5, y - Math.cos(angle2) * 3.5);
+  cx.stroke();
+
+  // "CRON" label
+  cx.fillStyle = '#FFD700';
+  cx.font = 'bold 6px monospace';
+  cx.textAlign = 'center';
+  cx.fillText('CRON', x, y + 15);
+  cx.textAlign = 'left';
+  cx.globalAlpha = 1;
+  cx.restore();
+}
+
+function drawWorkerLatency(cx, w, h) {
+  if (!S.lastLaneStats || !S.lastLaneStatsTime) return;
+  const age = (Date.now() - S.lastLaneStatsTime) / 1000;
+  if (age > 120) return; // Don't show if stale
+
+  const x = w - 50, y = 18;
+  cx.fillStyle = age < 5 ? '#44DD6680' : age < 30 ? '#FFD70080' : '#FF444480';
+  cx.fillRect(x, y, 44, 6);
+
+  // Freshness bar
+  const freshness = Math.max(0, 1 - age / 60);
+  cx.fillStyle = age < 5 ? '#44DD66' : age < 30 ? '#FFD700' : '#FF4444';
+  cx.fillRect(x, y, 44 * freshness, 6);
+
+  cx.fillStyle = '#FFFFFF99';
+  cx.font = '6px monospace';
+  cx.textAlign = 'right';
+  cx.fillText(`${Math.round(age)}s ago`, x - 2, y + 5);
+  cx.textAlign = 'left';
+}
+
+// ══════════════════════════════════════════
 // ── MAIN RENDER LOOP ──
 // ══════════════════════════════════════════
 export function render(ts){
@@ -1447,6 +1588,12 @@ export function render(ts){
     cx.fillStyle=oG;cx.fillRect(xpX,oY,oW2*oPct,oH2);
     cx.fillStyle='#FFD080';cx.font='bold 7px monospace';cx.fillText('DAG '+oDone+'/'+oTotal,xpX+oW2+4,oY+4);
   }
+  // Phase 3 HUD elements
+  drawGlobalLaneGauge(cx, w, h);
+  drawSteerFx(cx, w, h);
+  drawCronIndicator(cx, w, h);
+  drawWorkerLatency(cx, w, h);
+
   // Elevator + badges
   S.elevatorPackets=S.elevatorPackets.filter(ep=>{ep.progress+=ep.speed;return ep.progress<1});
   updateFloorBadges();

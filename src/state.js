@@ -31,6 +31,14 @@ export const S = {
   lastTick: 0, relayUptime: 0, lastLaneStats: null, lastLaneStatsTime: 0,
   // Orchestration
   orchRun: null,
+  // Steer
+  steerHistory: [], lastSteer: null,
+  // Global Lane
+  globalLane: null, lastGlobalLaneTime: 0,
+  // Cron
+  cronJobs: [], lastCronFire: null,
+  // Webhook
+  webhookLog: [],
   // Commands
   cmdHistory: [],
   // Panel

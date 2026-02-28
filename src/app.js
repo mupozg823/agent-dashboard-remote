@@ -152,6 +152,11 @@ export function connectWith(url, key, sessionId) {
   S.channel.on('broadcast', { event: 'lane-stats' }, ({ payload }) => {
     if (payload && !payload.error) {
       S.lastLaneStats = payload; S.lastLaneStatsTime = Date.now();
+      // Extract global stats if present
+      if (payload.globalStats) {
+        S.globalLane = payload.globalStats;
+        S.lastGlobalLaneTime = Date.now();
+      }
       const el = document.getElementById('laneInfo');
       if (el) {
         const locked = payload.locked ? '🔒' : '';
@@ -221,6 +226,41 @@ export function connectWith(url, key, sessionId) {
     if (ok) { for (let i = 0; i < 15; i++) spawnP(cW() * Math.random(), cH() * Math.random(), 4, 'success'); }
     else triggerShake(6);
     updateOrchUI();
+  });
+
+  // ── Steer Applied ──
+  S.channel.on('broadcast', { event: 'steer-applied' }, ({ payload }) => {
+    const steer = payload.steer || {};
+    S.lastSteer = { ...steer, ts: new Date().toISOString() };
+    S.steerHistory.unshift(S.lastSteer);
+    if (S.steerHistory.length > 20) S.steerHistory.pop();
+    toast(`Steer [${steer.mode || 'steer'}]: ${(steer.message || '').slice(0, 30)}`, 'in');
+    narr(`방향 전환! ${steer.mode}: ${steer.message}`, 'agent');
+    // Visual feedback
+    spawnP(cW() / 2, cH() / 2, 10, 'success');
+    triggerShake(2);
+    sUI();
+  });
+
+  // ── Cron Fire ──
+  S.channel.on('broadcast', { event: 'cron-fire' }, ({ payload }) => {
+    S.lastCronFire = { ...payload, ts: new Date().toISOString() };
+    toast(`Cron: ${(payload.command || '').slice(0, 30)}`, 'in');
+    narr(`예약 작업 실행: ${payload.command}`, 'bash');
+    spawnP(cW() * 0.8, cH() * 0.1, 5, 'success');
+  });
+
+  // ── Webhook Notify ──
+  S.channel.on('broadcast', { event: 'webhook-notify' }, ({ payload }) => {
+    S.webhookLog.unshift({ ...payload, ts: new Date().toISOString() });
+    if (S.webhookLog.length > 30) S.webhookLog.pop();
+    toast(`Webhook: ${(payload.message || payload.event || 'notify').slice(0, 30)}`, 'in');
+  });
+
+  // ── Global Lane Stats ──
+  S.channel.on('broadcast', { event: 'global-lane-stats' }, ({ payload }) => {
+    if (payload) { S.globalLane = payload; S.lastGlobalLaneTime = Date.now(); }
+    sUI();
   });
 
   function updateOrchUI() {
@@ -445,6 +485,73 @@ function rStatHTML() {
     const um = Math.floor(S.relayUptime / 60), us = S.relayUptime % 60;
     h += `<div style="font-size:10px;color:#8B7860;margin-top:6px">릴레이 업타임: ${um}분 ${us}초</div>`;
   }
+
+  // ── Global Lane Concurrency ──
+  h += '<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">Global Lane</div>';
+  if (S.globalLane) {
+    const gl = S.globalLane;
+    const usagePercent = gl.maxConcurrent > 0 ? (gl.currentRunning / gl.maxConcurrent * 100) | 0 : 0;
+    const usageColor = usagePercent >= 80 ? 'var(--err)' : usagePercent >= 50 ? 'var(--warn)' : 'var(--ok)';
+    h += `<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:11px">`;
+    h += `<div class="sb"><span class="n">동시 실행</span><div class="b"><div class="f" style="width:${usagePercent}%;background:${usageColor}"></div></div><span class="v">${gl.currentRunning}/${gl.maxConcurrent}</span></div>`;
+    h += `<div style="margin-top:4px">완료: <b style="color:var(--ok)">${gl.totalCompleted || 0}</b> | 실패: <b style="color:var(--err)">${gl.totalFailed || 0}</b></div>`;
+    if (gl.running && gl.running.length > 0) {
+      h += '<div style="margin-top:4px;font-size:9px;color:#8B7860">';
+      gl.running.forEach(r => {
+        h += `<div style="padding:1px 0">▶ <span style="color:var(--info)">${r.sessionId}</span>: ${esc((r.command || '').slice(0, 40))}</div>`;
+      });
+      h += '</div>';
+    }
+    if (gl.sessions && Object.keys(gl.sessions).length > 0) {
+      h += '<div style="margin-top:4px;font-size:9px;color:#8B7860">';
+      Object.entries(gl.sessions).forEach(([sid, st]) => {
+        if (st.total > 0) {
+          h += `<div>${sid.slice(0, 16)}: P:${st.pending} R:${st.running} C:${st.completed} F:${st.failed}</div>`;
+        }
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  } else {
+    h += '<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:11px;color:#8B7860">대기 중...</div>';
+  }
+
+  // ── Cron Schedule ──
+  if (S.cronJobs.length > 0 || S.lastCronFire) {
+    h += '<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">Cron 스케줄</div>';
+    h += '<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:10px">';
+    if (S.cronJobs.length > 0) {
+      S.cronJobs.forEach(j => {
+        h += `<div style="padding:1px 0"><code style="color:var(--info)">${j.schedule}</code> ${esc(j.command.slice(0, 30))}</div>`;
+      });
+    }
+    if (S.lastCronFire) {
+      h += `<div style="margin-top:3px;color:var(--ok)">마지막: ${(S.lastCronFire.ts || '').slice(11, 19)} ${esc((S.lastCronFire.command || '').slice(0, 25))}</div>`;
+    }
+    h += '</div>';
+  }
+
+  // ── Webhook Log ──
+  if (S.webhookLog.length > 0) {
+    h += '<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">Webhook</div>';
+    h += '<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:10px;max-height:80px;overflow:auto">';
+    S.webhookLog.slice(0, 10).forEach(w => {
+      h += `<div style="padding:1px 0"><span style="color:#AAA">${(w.ts || '').slice(11, 19)}</span> ${esc((w.message || w.event || 'notify').slice(0, 40))}</div>`;
+    });
+    h += '</div>';
+  }
+
+  // ── Steer History ──
+  if (S.steerHistory.length > 0) {
+    h += '<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 6px">Steer 이력</div>';
+    h += '<div style="padding:6px;background:#FFF8E8;border-radius:6px;font-size:10px;max-height:80px;overflow:auto">';
+    S.steerHistory.slice(0, 10).forEach(s => {
+      const modeC = s.mode === 'replace' ? 'var(--err)' : s.mode === 'followup' ? 'var(--warn)' : 'var(--info)';
+      h += `<div style="padding:1px 0;border-left:2px solid ${modeC};padding-left:4px"><span style="color:#AAA">${(s.ts || '').slice(11, 19)}</span> <b style="color:${modeC}">[${s.mode}]</b> ${esc((s.message || '').slice(0, 35))}</div>`;
+    });
+    h += '</div>';
+  }
+
   return h;
 }
 
@@ -468,14 +575,35 @@ function rAgHTML() {
 
 function rCmdHTML() {
   let h = '<div class="cmd-area">';
+  // Command input row
   h += '<div class="cmd-row"><input id="cmdInput" placeholder="명령 입력..."><button id="cmdSendBtn">전송</button></div>';
-  h += '<div class="quick-cmds">';
-  h += '<button class="qc" data-cmd="/status">📋 상태</button>';
-  h += '<button class="qc" data-cmd="/log">📝 로그</button>';
-  h += '<button class="qc" data-cmd="/optimize">⚡ 최적화</button>';
-  h += '<button class="qc" data-cmd="/continue">▶ 이어서</button>';
-  h += '<button class="qc" data-cmd="__status__">🔄 새로고침</button>';
+  // Mode selector row
+  h += '<div class="cmd-modes" style="display:flex;gap:4px;margin:4px 0">';
+  h += '<button class="qc mode-btn" data-mode="command" style="flex:1;background:var(--accent);color:#FFF">명령</button>';
+  h += '<button class="qc mode-btn" data-mode="steer" style="flex:1">Steer</button>';
+  h += '<button class="qc mode-btn" data-mode="followup" style="flex:1">Followup</button>';
+  h += '<button class="qc mode-btn" data-mode="replace" style="flex:1">Replace</button>';
   h += '</div>';
+  // Quick commands
+  h += '<div class="quick-cmds">';
+  h += '<button class="qc" data-cmd="/status">상태</button>';
+  h += '<button class="qc" data-cmd="/log">로그</button>';
+  h += '<button class="qc" data-cmd="/optimize">최적화</button>';
+  h += '<button class="qc" data-cmd="/continue">이어서</button>';
+  h += '<button class="qc" data-cmd="__status__">새로고침</button>';
+  h += '</div>';
+  // Steer history (if any)
+  if (S.steerHistory.length > 0) {
+    h += '<div style="font-size:10px;color:var(--gold-dd);font-weight:bold;margin:6px 0 4px">Steer 이력</div>';
+    h += '<div style="max-height:60px;overflow:auto">';
+    S.steerHistory.slice(0, 5).forEach(s => {
+      const tm = (s.ts || '').slice(11, 19);
+      const modeC = s.mode === 'replace' ? 'var(--err)' : s.mode === 'followup' ? 'var(--warn)' : 'var(--info)';
+      h += `<div style="font-size:9px;padding:2px 4px;margin:1px 0;background:#FFF8E8;border-radius:3px;border-left:2px solid ${modeC}"><span style="color:#AAA">${tm}</span> <span style="color:${modeC};font-weight:bold">[${s.mode}]</span> ${esc((s.message || '').slice(0, 40))}</div>`;
+    });
+    h += '</div>';
+  }
+  // Command history
   h += '<div id="cmdHist" class="cmd-hist">';
   h += renderCmdHistItems();
   h += '</div></div>';
@@ -502,6 +630,20 @@ function setupCmdHandlers() {
       else quickCmd(cmd);
     });
   });
+  // Mode buttons
+  document.querySelectorAll('.mode-btn[data-mode]').forEach(b => {
+    b.addEventListener('click', () => {
+      currentCmdMode = b.dataset.mode;
+      document.querySelectorAll('.mode-btn').forEach(m => {
+        m.style.background = m.dataset.mode === currentCmdMode ? 'var(--accent)' : '';
+        m.style.color = m.dataset.mode === currentCmdMode ? '#FFF' : '';
+      });
+      const inp2 = document.getElementById('cmdInput');
+      if (inp2) inp2.placeholder = currentCmdMode === 'command' ? '명령 입력...' :
+        currentCmdMode === 'steer' ? 'Steer 메시지...' :
+        currentCmdMode === 'followup' ? 'Followup 명령...' : 'Replace 명령...';
+    });
+  });
 }
 
 // ── Command Sending ──
@@ -510,8 +652,19 @@ function sendCmd() {
   const cmd = input.value.trim();
   if (!cmd || !S.channel) return;
   const id = 'cmd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  S.channel.send({ type: 'broadcast', event: 'command', payload: { id, command: cmd, priority: 'normal' } });
-  S.cmdHistory.unshift({ id, command: cmd, status: 'pending', ts: new Date() });
+
+  if (currentCmdMode === 'command') {
+    S.channel.send({ type: 'broadcast', event: 'command', payload: { id, command: cmd, priority: 'normal' } });
+    S.cmdHistory.unshift({ id, command: cmd, status: 'pending', ts: new Date() });
+  } else {
+    // Steer modes: steer, followup, replace
+    S.channel.send({ type: 'broadcast', event: 'command', payload: {
+      id, command: `__steer__`, message: cmd, mode: currentCmdMode, priority: 'high'
+    } });
+    S.cmdHistory.unshift({ id, command: `[${currentCmdMode}] ${cmd}`, status: 'pending', ts: new Date() });
+    toast(`${currentCmdMode} 전송: ${cmd.slice(0, 30)}`, 'in');
+  }
+
   renderCmdHist();
   input.value = '';
 }
@@ -543,6 +696,8 @@ function renderCmdHist() {
   const el = document.getElementById('cmdHist');
   if (el) el.innerHTML = renderCmdHistItems();
 }
+
+let currentCmdMode = 'command'; // command | steer | followup | replace
 
 // ══════════════════════════════════════════
 // ── TOUCH / SWIPE / INTERACTION ──
