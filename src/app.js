@@ -58,9 +58,13 @@ function onE(e) {
     spawnP(cW() / 2, cH() * .3, 8, 'error');
     triggerShake(4); addCombo(false);
     toast('차단: ' + (e.cmd || e.tool || '').slice(0, 30), 'er');
+    // Emotion: frustrated on deny
+    if (ag && ag.setEmotion) ag.setEmotion('frustrated', 120);
   } else if (e.err) {
     spawnP(deskX, cH() * .5, 5, 'error');
     const p = NR[e.tool] || NR.idle; narr(pick(p), AT[ai]); addCombo(false);
+    // Emotion: frustrated on error
+    if (ag && ag.setEmotion) ag.setEmotion('frustrated', 80);
   } else {
     const p = NR[e.tool] || NR.idle; narr(pick(p), AT[ai]); addCombo(true);
     const pCount = 3 + (S.combo > 5 ? 3 : 0) + (S.combo > 10 ? 4 : 0);
@@ -68,6 +72,12 @@ function onE(e) {
     if (Math.random() < .3) {
       S.pts.push({ x: deskX, y: cH() * .5, vx: (cW() / 2 - deskX) * .02, vy: -(cH() * .5 - 20) * .02,
         l: 50, c: TOOL_COLORS[e.tool] ? TOOL_COLORS[e.tool][0] : '#FFD080', z: 2, shape: 'circle', rot: 0, rv: 0 });
+    }
+    // Emotion: happy on success, excited on combo 5+
+    if (ag && ag.setEmotion) {
+      if (S.combo >= 10) ag.setEmotion('excited', 100);
+      else if (S.combo >= 5) ag.setEmotion('happy', 80);
+      else ag.setEmotion('focused', 60);
     }
   }
 }
