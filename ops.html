@@ -339,6 +339,67 @@ body {
 @media (max-width:480px) {
   .stat-value { font-size:18px; }
 }
+
+/* ── Agent Cards ── */
+.agent-card {
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  transition: border-color 0.2s;
+}
+.agent-card .ac-header {
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.agent-card .ac-icon {
+  width:32px; height:32px;
+  border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px; font-weight:700;
+  flex-shrink:0;
+}
+.agent-card .ac-name {
+  font-size:12px; font-weight:600;
+  color:var(--text-primary);
+}
+.agent-card .ac-desc {
+  font-size:10px;
+  color:var(--text-muted);
+}
+.agent-card .ac-stats {
+  display:flex;
+  gap:12px;
+  font-size:11px;
+}
+.agent-card .ac-stat-val {
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.agent-card .ac-bar {
+  height:4px;
+  border-radius:2px;
+  background:rgba(100,120,200,0.1);
+  overflow:hidden;
+}
+.agent-card .ac-bar-fill {
+  height:100%;
+  border-radius:2px;
+  transition:width 0.5s ease;
+}
+.agent-card.idle { opacity:0.5; }
+.agent-card.active { border-color:var(--border-active); }
+@keyframes ac-pulse {
+  0%,100% { opacity:1; }
+  50% { opacity:0.6; }
+}
+.ac-active-dot {
+  width:6px; height:6px;
+  border-radius:50%;
+  background:var(--success);
+  animation:ac-pulse 1.5s ease-in-out infinite;
+}
 </style>
 </head>
 <body>
@@ -535,7 +596,19 @@ body {
       </div>
     </div>
 
-    <!-- ── 8. Activity Heatmap ── -->
+    <!-- ── 8. Agent Activity Cards ── -->
+    <div class="glass lg:col-span-2">
+      <div class="panel-header" onclick="togglePanel('agents')">
+        <span>Agent Activity</span>
+        <span class="text-xs font-normal" style="color:var(--text-muted)" id="agentActiveCount">0 active</span>
+        <span class="chevron" id="chev-agents">&#9660;</span>
+      </div>
+      <div id="panel-agents">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 p-3" id="agentCards"></div>
+      </div>
+    </div>
+
+    <!-- ── 9. Activity Heatmap ── -->
     <div class="glass lg:col-span-2">
       <div class="panel-header" onclick="togglePanel('heatmap')">
         <span>Activity Heatmap (7d)</span>
@@ -609,6 +682,8 @@ const store = new Proxy({
   cmdPending: {},
   // heatmap
   heatmap: {},
+  // agents
+  agentActivity: {},
 }, {
   set(target, prop, value) {
     const old = target[prop];
@@ -753,6 +828,8 @@ function onAudit(p) {
   }
   // Heatmap
   recordHeatmap(p._ts || new Date().toISOString());
+  // Agent activity
+  trackAgent(p);
   // Push
   const entries = [...store.auditEntries, entry];
   if (entries.length > MAX_AUDIT) entries.splice(0, entries.length - MAX_AUDIT);
@@ -902,6 +979,7 @@ function render(prop) {
     case 'currentExec': renderCurrentExec(); break;
     case 'queueHistory': renderQueueHistory(); break;
     case 'heatmap': renderHeatmap(); break;
+    case 'agentActivity': renderAgentCards(); break;
   }
 }
 
@@ -1345,6 +1423,87 @@ function addCmdResult(id, text, ok) {
   container.scrollTop = container.scrollHeight;
 }
 
+// ── Agent Activity Cards ──
+const AGENT_DEFS = [
+  { id:'shell',    name:'Shell',    icon:'$_', color:'var(--g-shell)',    desc:'Bash commands' },
+  { id:'file-io',  name:'File I/O', icon:'F',  color:'var(--g-file-io)', desc:'Read / Write' },
+  { id:'edit',     name:'Editor',   icon:'E',  color:'var(--g-edit)',     desc:'Edit / Notebook' },
+  { id:'search',   name:'Search',   icon:'?',  color:'var(--g-search)',   desc:'Glob / Grep' },
+  { id:'external', name:'External', icon:'W',  color:'var(--g-external)', desc:'Web / MCP' },
+  { id:'agent',    name:'Agent',    icon:'A',  color:'var(--g-agent)',    desc:'Task / Skill' },
+  { id:'other',    name:'Other',    icon:'O',  color:'var(--g-other)',    desc:'Misc tools' },
+];
+const AGENT_IDLE_MS = 60000; // 1 min without activity = idle
+
+function trackAgent(entry) {
+  const group = entry.group || 'other';
+  const now = Date.now();
+  const act = { ...store.agentActivity };
+  if (!act[group]) {
+    act[group] = { total:0, errors:0, lastSeen:0, recentOps:[], streak:0 };
+  }
+  const a = { ...act[group] };
+  a.total++;
+  if (entry.ok === false) a.errors++;
+  a.lastSeen = now;
+  // Recent ops (last 30 seconds sliding window)
+  a.recentOps = [...(a.recentOps || []).filter(t => now - t < 30000), now];
+  // Streak: consecutive ops within 10s
+  a.streak = a.recentOps.length;
+  act[group] = a;
+  store.agentActivity = act;
+}
+
+function renderAgentCards() {
+  const container = document.getElementById('agentCards');
+  if (!container) return;
+  const act = store.agentActivity;
+  const now = Date.now();
+  let activeCount = 0;
+
+  let html = '';
+  for (const def of AGENT_DEFS) {
+    const a = act[def.id] || { total:0, errors:0, lastSeen:0, recentOps:[], streak:0 };
+    const isActive = a.lastSeen && (now - a.lastSeen < AGENT_IDLE_MS);
+    if (isActive) activeCount++;
+    const opsPerMin = a.recentOps ? (a.recentOps.filter(t => now - t < 60000).length) : 0;
+    const errRate = a.total > 0 ? ((a.errors / a.total) * 100).toFixed(0) : '0';
+    const totalAll = Math.max(1, ...AGENT_DEFS.map(d => (act[d.id]?.total || 0)));
+    const barPct = ((a.total / totalAll) * 100).toFixed(0);
+    const lastAgo = a.lastSeen ? timeAgo(a.lastSeen) : 'never';
+    const stateClass = isActive ? 'active' : (a.total > 0 ? '' : 'idle');
+
+    html += `<div class="glass agent-card ${stateClass}">
+      <div class="ac-header">
+        <div class="ac-icon" style="background:${def.color}20;color:${def.color};">${def.icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="ac-name flex items-center gap-1">
+            ${isActive ? '<span class="ac-active-dot"></span>' : ''}
+            ${esc(def.name)}
+          </div>
+          <div class="ac-desc">${esc(def.desc)}</div>
+        </div>
+      </div>
+      <div class="ac-stats">
+        <span style="color:var(--text-secondary)"><span class="ac-stat-val">${a.total}</span> ops</span>
+        <span style="color:${parseInt(errRate) > 10 ? 'var(--danger)' : 'var(--text-muted)'}"><span class="ac-stat-val">${errRate}%</span> err</span>
+        ${isActive ? `<span style="color:var(--success)"><span class="ac-stat-val">${opsPerMin}</span>/m</span>` : `<span style="color:var(--text-muted)">${lastAgo}</span>`}
+      </div>
+      <div class="ac-bar">
+        <div class="ac-bar-fill" style="width:${barPct}%;background:${def.color};"></div>
+      </div>
+    </div>`;
+  }
+
+  container.innerHTML = html;
+  document.getElementById('agentActiveCount').textContent = activeCount + ' active';
+}
+
+// Refresh agent idle states every 5s
+setInterval(() => {
+  if (Object.keys(store.agentActivity).length > 0) renderAgentCards();
+}, 5000);
+
 // ── Activity Heatmap ──
 function loadHeatmap() {
   try {
@@ -1529,6 +1688,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderHeatmap();
   renderDAG();
   renderAuditLog();
+  renderAgentCards();
 
   const p = getParams();
   if (p.url && p.key && p.session) {
