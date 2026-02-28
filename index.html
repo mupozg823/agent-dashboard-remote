@@ -608,6 +608,10 @@ const FLOORS=[
 const AGENT_FLOOR={bash:0,writer:0,reader:1,finder:1,serena:1,mcp:2,agent:2,web:2};
 let currentFloor=0, viewMode='floor', floorBgCache=[null,null,null], floorAnim=0, floorAnimDir=0;
 let elevatorPackets=[];
+// Building view hit areas for floor click
+let buildingFloorHits=[]; // [{fi, x, y, w, h}]
+// Swipe state for floor navigation
+let swipeStartY=0, swipeStartTime=0, swipeActive=false;
 
 function switchFloor(idx){
   if(idx===currentFloor&&viewMode==='floor')return;
@@ -1219,6 +1223,79 @@ function buildBg(w,h){
       g.beginPath();g.arc(px2+lx,py+ly,4,0,Math.PI*2);g.fill();
     });
   });
+  // ── Floor-specific decorations ──
+  if(viewMode==='floor'){
+    const _dfy=fy,_ds=s;
+    if(currentFloor===0){
+      // 1F Coding Lab: server rack (left) + monitor stand (right)
+      const rx=w*.08,ry=_dfy-32*_ds/5;
+      g.fillStyle='#2A2A3A';g.fillRect(rx,ry,12*_ds/5,28*_ds/5);
+      g.fillStyle='#1A1A2A';g.fillRect(rx+1,ry+1,10*_ds/5,26*_ds/5);
+      for(let si=0;si<5;si++){
+        const sy2=ry+3+si*5*_ds/5;
+        g.fillStyle=si<3?'#44DD66':'#333';g.fillRect(rx+2,sy2,8*_ds/5,3*_ds/5);
+        if(si<3){g.fillStyle='#00FF0060';g.fillRect(rx+2,sy2,1.5,1.5)} // LED
+      }
+      // Cable bundle
+      g.strokeStyle='#55555580';g.lineWidth=1;g.beginPath();g.moveTo(rx+6*_ds/5,ry+28*_ds/5);g.lineTo(rx+6*_ds/5,_dfy+8);g.stroke();
+      // Second rack
+      const rx2=w*.92;
+      g.fillStyle='#2A2A3A';g.fillRect(rx2,ry+4,10*_ds/5,24*_ds/5);
+      g.fillStyle='#1A1A2A';g.fillRect(rx2+1,ry+5,8*_ds/5,22*_ds/5);
+      for(let si=0;si<4;si++){
+        g.fillStyle='#333844';g.fillRect(rx2+2,ry+7+si*5*_ds/5,6*_ds/5,3*_ds/5);
+        g.fillStyle=Math.random()>.5?'#44AAFF40':'#FF444440';g.fillRect(rx2+2,ry+7+si*5*_ds/5,1,1);
+      }
+    }else if(currentFloor===1){
+      // 2F Analysis Center: bookshelf (left) + magnifying glass (right)
+      const bx2=w*.06,by2=_dfy-30*_ds/5;
+      g.fillStyle='#6B4E30';g.fillRect(bx2,by2,14*_ds/5,30*_ds/5);
+      g.fillStyle='#5A3E20';g.fillRect(bx2+1,by2+1,12*_ds/5,28*_ds/5);
+      const bookColors=['#CC3333','#3366CC','#44AA44','#CC8833','#8844AA','#DD6688'];
+      for(let bi=0;bi<3;bi++){
+        const sy2=by2+3+bi*9*_ds/5;
+        g.fillStyle='#4A3018';g.fillRect(bx2+1,sy2+7*_ds/5,12*_ds/5,1.5); // shelf
+        for(let bj=0;bj<4;bj++){
+          g.fillStyle=bookColors[(bi*4+bj)%bookColors.length];
+          const bw=2+Math.random()*1.5;
+          g.fillRect(bx2+2+bj*3*_ds/5,sy2,bw*_ds/5,7*_ds/5);
+        }
+      }
+      // Magnifying glass icon
+      const mx=w*.93,my=_dfy-16;
+      g.strokeStyle='#8866CC';g.lineWidth=2;g.beginPath();g.arc(mx,my,6,0,Math.PI*2);g.stroke();
+      g.strokeStyle='#6644AA';g.lineWidth=2.5;g.beginPath();g.moveTo(mx+4,my+4);g.lineTo(mx+9,my+9);g.stroke();
+      g.fillStyle='#8866CC20';g.beginPath();g.arc(mx,my,5,0,Math.PI*2);g.fill();
+    }else if(currentFloor===2){
+      // 3F Operations Hub: world map (left) + antenna/satellite (right)
+      const mx2=w*.05,my2=_dfy-28*_ds/5,mw=16*_ds/5,mh=12*_ds/5;
+      g.fillStyle='#5A4A3A';g.fillRect(mx2-1,my2-1,mw+2,mh+2);
+      g.fillStyle='#2244AA';g.fillRect(mx2,my2,mw,mh);
+      // Continents (simplified)
+      g.fillStyle='#44AA44';
+      g.fillRect(mx2+2,my2+2,4*_ds/5,5*_ds/5); // Americas
+      g.fillRect(mx2+8*_ds/5,my2+1,4*_ds/5,4*_ds/5); // Europe/Africa
+      g.fillRect(mx2+12*_ds/5,my2+3,3*_ds/5,4*_ds/5); // Asia
+      // Blinking dots (active connections)
+      const dots=[[3,3],[10,2],[13,5]];
+      dots.forEach(([dx,dy])=>{
+        if(Math.sin(fr*.1+dx*2)>.3){
+          g.fillStyle='#FF884080';g.beginPath();g.arc(mx2+dx*_ds/5,my2+dy*_ds/5,1.5,0,6.28);g.fill();
+        }
+      });
+      // Satellite dish (right)
+      const ax=w*.93,ay=_dfy-20;
+      g.fillStyle='#888';g.fillRect(ax,ay+6,2,10); // pole
+      g.strokeStyle='#AAA';g.lineWidth=1.5;g.beginPath();g.arc(ax+1,ay+4,6,Math.PI*.8,Math.PI*1.8);g.stroke();
+      g.fillStyle='#FF884060';g.beginPath();g.arc(ax+1,ay+4,2,0,6.28);g.fill();
+      // Signal waves
+      for(let si=1;si<=3;si++){
+        const a2=.3+Math.sin(fr*.06+si)*.15;
+        g.strokeStyle=`rgba(255,136,68,${a2})`;g.lineWidth=.8;
+        g.beginPath();g.arc(ax+1,ay+4,4+si*3,-.6,-.2);g.stroke();
+      }
+    }
+  }
   DESKS.filter(d=>viewMode==='building'||d.floor===currentFloor).forEach((d)=>{
     const di=DESKS.indexOf(d);
     const x=d.x*w, dy=fy+2, ds=s*.8;
@@ -2132,11 +2209,13 @@ function renderBuildingView(w,h){
     bx.fillStyle='#3A8A3A';bx.beginPath();bx.arc(tx+1.5,ty-18,8,0,6.28);bx.fill();
     bx.fillStyle='#4A9A4A';bx.beginPath();bx.arc(tx+4,ty-20,6,0,6.28);bx.fill();
   });
-  // Floors (bottom=1F, top=3F)
+  // Floors (bottom=1F, top=3F) - store hit areas for click
+  buildingFloorHits=[];
   for(let fi=2;fi>=0;fi--){
     const fl=FLOORS[fi],fc=fl.colors;
     const fy2=startY+(2-fi)*(flH+margin);
     const flL=bL+4,flR=eX-2,flW=flR-flL;
+    buildingFloorHits.push({fi,x:flL,y:fy2,w:flW,h:flH});
     // Wall
     const wg=bx.createLinearGradient(0,fy2,0,fy2+flH);
     wg.addColorStop(0,fc.wall[0]);wg.addColorStop(.7,fc.wall[1]);wg.addColorStop(1,fc.wall[2]||fc.wall[1]);
@@ -2924,14 +3003,32 @@ setInterval(()=>{
   else sig.className='signal weak';
 },10000);
 
-// ── Canvas Touch Support (improved hit detection) ──
+// ── Canvas Touch Support (improved hit detection + swipe floor switch) ──
 const sceneEl=document.querySelector('.scene');
-(sceneEl||document.getElementById('c')).addEventListener('touchstart',(e)=>{
-  const touch=e.touches[0];
+const _cTarget=sceneEl||document.getElementById('c');
+function _canvasCoords(clientX,clientY){
   const target=pixiApp?pixiApp.canvas:cv;
   const rect=target.getBoundingClientRect();
-  const sx=cW()/rect.width, sy=cH()/rect.height;
-  const cx2=(touch.clientX-rect.left)*sx, cy2=(touch.clientY-rect.top)*sy;
+  return{x:(clientX-rect.left)*(cW()/rect.width),y:(clientY-rect.top)*(cH()/rect.height)};
+}
+function _handleBuildingClick(cx2,cy2){
+  if(viewMode!=='building'||!buildingFloorHits.length)return false;
+  for(const h of buildingFloorHits){
+    if(cx2>=h.x&&cx2<=h.x+h.w&&cy2>=h.y&&cy2<=h.y+h.h){
+      switchFloor(h.fi); // switchFloor sets viewMode='floor'
+      spawnP(cx2,cy2,5);
+      return true;
+    }
+  }
+  return false;
+}
+_cTarget.addEventListener('touchstart',(e)=>{
+  const touch=e.touches[0];
+  const{x:cx2,y:cy2}=_canvasCoords(touch.clientX,touch.clientY);
+  // Swipe tracking
+  swipeStartY=touch.clientY;swipeStartTime=Date.now();swipeActive=true;
+  // Building view floor click
+  if(_handleBuildingClick(cx2,cy2))return;
   // Hit test - check agents and desks
   const hitAgent=agents.find(a=>{
     const ax=a.x*cW(), ay=a.y*cH();
@@ -2940,10 +3037,25 @@ const sceneEl=document.querySelector('.scene');
   if(hitAgent){
     const c2=C[hitAgent.t];
     narr(`${c2.l} Lv.${hitAgent.lv} (${c2.r}) - ${hitAgent.st==='work'?'작업: '+hitAgent.tk:hitAgent.st==='walk'?'이동 중':'대기'} [${hitAgent.tot}ops]`,AT[hitAgent.i]);
-    // Tap feedback: spawn particles
     spawnP(hitAgent.x*cW(),hitAgent.y*cH()-20,3);
   }
 },{passive:true});
+_cTarget.addEventListener('touchend',(e)=>{
+  if(!swipeActive)return;swipeActive=false;
+  const touch=e.changedTouches[0];
+  const dy=touch.clientY-swipeStartY;
+  const dt=Date.now()-swipeStartTime;
+  if(dt<500&&Math.abs(dy)>50){
+    // Swipe up → higher floor, swipe down → lower floor
+    if(dy<-50&&currentFloor<2)switchFloor(currentFloor+1);
+    else if(dy>50&&currentFloor>0)switchFloor(currentFloor-1);
+  }
+},{passive:true});
+// Desktop click: building view floor click
+_cTarget.addEventListener('click',(e)=>{
+  const{x:cx2,y:cy2}=_canvasCoords(e.clientX,e.clientY);
+  _handleBuildingClick(cx2,cy2);
+});
 
 // ── Bottom sheet swipe-down to close ──
 let sheetStartY=0;
