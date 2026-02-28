@@ -1271,12 +1271,14 @@ function render(ts){
   lastRender=ts;
   const w=cW(),h=cH();
   if(w<10||h<10){resize();return;} // Canvas not ready, retry
+  try{
   if(!bg||bgW!==w||bgH!==h)buildBg(w,h);
   // Screen shake
   let sx=0,sy=0;
   if(shakeFrames>0){sx=(Math.random()-.5)*shakeIntensity;sy=(Math.random()-.5)*shakeIntensity;shakeFrames--}
   cx.save();cx.translate(sx,sy);
-  cx.drawImage(bg,0,0,bg.width,bg.height,0,0,w,h);
+  if(bg)cx.drawImage(bg,0,0,bg.width,bg.height,0,0,w,h);
+  else{cx.fillStyle='#FF0000';cx.fillRect(0,0,w,h);cx.fillStyle='#FFF';cx.font='20px sans-serif';cx.fillText('BG FAIL w='+w+' h='+h,10,30)}
   drawWeather(w,h);
   const fy=h*.55;
   DESKS.forEach((d,i)=>{if(d.act)drawActiveScreen(d.x*w,fy,AT[i])});
@@ -1384,6 +1386,7 @@ function render(ts){
   cx.restore();
   fr++;
   mainCx.drawImage(buf,0,0);
+  }catch(e){mainCx.fillStyle='#FF0000';mainCx.font='14px monospace';mainCx.fillText('RENDER ERR: '+e.message,10,20);mainCx.fillText('w='+cW()+' h='+cH()+' bg='+(bg?'ok':'null'),10,40)}
 }
 
 // ══════════════════════════════════════════════════════
