@@ -432,6 +432,7 @@ body {
       </div>
       <div class="flex items-center gap-3">
         <span class="text-xs font-mono" style="color:var(--text-muted)" id="uptimeLabel">--</span>
+        <span class="text-xs font-mono" style="color:var(--accent)" id="evtCounter">0 evt</span>
         <span class="text-xs" style="color:var(--text-muted)" id="lastUpdate">--</span>
         <button onclick="toggleTheme()" class="text-xs px-2 py-1 rounded" style="background:var(--glass-bg);border:1px solid var(--border);color:var(--text-secondary);cursor:pointer;" id="themeBtn">Dark</button>
         <a href="index.html" class="text-xs px-2 py-1 rounded" style="background:var(--glass-bg);border:1px solid var(--border);color:var(--text-secondary);text-decoration:none;">Cairo</a>
@@ -636,6 +637,8 @@ const GROUP_COLORS = {
   other:'var(--g-other)'
 };
 const MAX_AUDIT = 2000;
+let _evtCount = 0;
+function _evt() { _evtCount++; const el = document.getElementById('evtCounter'); if(el) el.textContent = _evtCount + ' evt'; }
 const SPARKLINE_POINTS = 30;
 const MAX_QUEUE_HISTORY = 20;
 
@@ -789,6 +792,7 @@ function connectWith(url, key, sessionId) {
   });
 
   channel.subscribe(async (status) => {
+    console.log('[ops-dash] subscribe status:', status);
     if (status === 'SUBSCRIBED') {
       store.connected = true;
       reconnectAttempts = 0;
@@ -818,6 +822,7 @@ function scheduleReconnect() {
 
 // ── Event Handlers ──
 function onAudit(p) {
+  _evt();
   if (!p) return;
   const now = Date.now();
   const entry = { ...p, _rx: now };
@@ -838,6 +843,7 @@ function onAudit(p) {
 }
 
 function onStatus(p) {
+  _evt();
   if (!p) return;
   store.systemStatus = 'ONLINE';
   if (p.system) {
@@ -850,6 +856,7 @@ function onStatus(p) {
 }
 
 function onMetrics(p) {
+  _evt();
   if (!p) return;
   store.opsPerMin = p.opsPerMin || 0;
   store.successRate = p.successRate || '--';
@@ -868,6 +875,7 @@ function onMetrics(p) {
 }
 
 function onTick(p) {
+  _evt();
   if (!p) return;
   store.uptime = p.uptime || 0;
   store.memMB = p.memMB || 0;
