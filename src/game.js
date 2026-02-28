@@ -454,73 +454,381 @@ export function spawnElevatorPacket(fromFloor,toFloor,tool){
 // ══════════════════════════════════════════
 function renderBuildingView(w,h){
   const cx=S.cx, fr=S.fr;
-  const floorH=h/3.5, margin=2, startY=h-floorH*3-margin*3-10;
-  // Sky
-  const skyG=cx.createLinearGradient(0,0,0,startY+10);
-  skyG.addColorStop(0,'#88CCFF');skyG.addColorStop(1,'#BBDDFF');
-  cx.fillStyle=skyG;cx.fillRect(0,0,w,startY+10);
-  cx.fillStyle='#D4C8A0';cx.fillRect(0,startY+floorH*3+margin*3,w,h);
-  // Rooftop
-  cx.fillStyle='#8B6914';cx.fillRect(w*.12,startY-6,w*.76,8);
-  cx.fillStyle='#A08030';cx.fillRect(w*.15,startY-14,w*.7,10);
-  // Sign
-  cx.fillStyle='#1A1A3A';cx.fillRect(w*.28,startY-40,w*.44,28);
-  cx.fillStyle='#FFD080';cx.font='bold 13px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';
-  cx.textAlign='center';cx.fillText('에이전트 개발국',w*.5,startY-22);
-  // Antenna
-  cx.fillStyle='#555';cx.fillRect(w*.5-1,startY-56,2,18);
-  cx.fillStyle='#CC0000';cx.fillRect(w*.5-3,startY-58,6,4);
-  if(fr%30<15){cx.fillStyle='#FF000040';cx.beginPath();cx.arc(w*.5,startY-56,6,0,Math.PI*2);cx.fill()}
-  // Elevator shaft
-  const eX=w*.87, eW=w*.09;
-  cx.fillStyle='#3A3A4A';cx.fillRect(eX,startY,eW,floorH*3+margin*2);
-  cx.fillStyle='#4A4A5A';cx.fillRect(eX+3,startY,eW-6,floorH*3+margin*2);
-  cx.fillStyle='#5A5A6A';cx.fillRect(eX+4,startY,2,floorH*3+margin*2);cx.fillRect(eX+eW-6,startY,2,floorH*3+margin*2);
-  // Floors (bottom=1F, top=3F)
+  const phase=getDayPhase();
+  const isNight=phase==='night', isEvening=phase==='evening';
+
+  // Layout
+  const bldgL=w*.08, bldgR=w*.92, bldgW=bldgR-bldgL;
+  const groundY=h*.88, roofY=h*.08;
+  const totalBldgH=groundY-roofY;
+  const floorH=totalBldgH/3.15, margin=2;
+  const startY=groundY-floorH*3-margin*2;
+
+  // ── SKY ──
+  const skyG=cx.createLinearGradient(0,0,0,groundY);
+  if(isNight){skyG.addColorStop(0,'#0A0A2A');skyG.addColorStop(.5,'#1A1A3A');skyG.addColorStop(1,'#2A2A4A')}
+  else if(isEvening){skyG.addColorStop(0,'#2A1A4A');skyG.addColorStop(.3,'#CC6644');skyG.addColorStop(.6,'#FFAA66');skyG.addColorStop(1,'#FFD8A0')}
+  else{skyG.addColorStop(0,'#4488CC');skyG.addColorStop(.5,'#66AADD');skyG.addColorStop(1,'#AACCEE')}
+  cx.fillStyle=skyG;cx.fillRect(0,0,w,groundY);
+
+  // Stars (night)
+  if(isNight){
+    cx.fillStyle='#FFFFFF';
+    for(let i=0;i<20;i++){
+      const sx2=((i*37+fr*.02)%1)*w, sy2=((i*53+i*17)%1)*groundY*.6;
+      const twinkle=Math.sin(fr*.05+i*2)*.5+.5;
+      cx.globalAlpha=twinkle*.7+.1;
+      cx.fillRect(sx2,sy2,1.5,1.5);
+    }
+    cx.globalAlpha=1;
+    // Moon
+    cx.fillStyle='#FFE8AA';cx.beginPath();cx.arc(w*.82,h*.1,14,0,Math.PI*2);cx.fill();
+    cx.fillStyle=isNight?'#0A0A2A':'#4488CC';cx.beginPath();cx.arc(w*.82+5,h*.1-3,12,0,Math.PI*2);cx.fill();
+  }
+
+  // Clouds
+  if(!isNight){
+    cx.fillStyle=isEvening?'#FFD8A060':'#FFFFFF50';
+    const cOff=(fr*.15)%w;
+    [[cOff,h*.06,30],[cOff+w*.4,h*.12,22],[cOff-w*.3,h*.09,26]].forEach(([cx2,cy2,r])=>{
+      const x2=((cx2%w)+w)%w;
+      cx.beginPath();cx.arc(x2,cy2,r,0,Math.PI*2);cx.arc(x2+r*.8,cy2-r*.2,r*.7,0,Math.PI*2);cx.arc(x2-r*.6,cy2+r*.1,r*.6,0,Math.PI*2);cx.fill();
+    });
+  }
+
+  // ── GROUND ──
+  cx.fillStyle='#8B9E6B';cx.fillRect(0,groundY,w,h-groundY);
+  cx.fillStyle='#7A8E5A';cx.fillRect(0,groundY,w,3);
+  // Pavement
+  cx.fillStyle='#A0A0A0';cx.fillRect(0,groundY+3,w,h*.06);
+  cx.fillStyle='#909090';cx.fillRect(0,groundY+3,w,2);
+  // Road line
+  for(let i=0;i<w;i+=20){cx.fillStyle='#CCCC88';cx.fillRect(i,groundY+3+h*.03,10,2)}
+  // Grass tufts
+  cx.fillStyle='#6A8E4A';
+  for(let i=0;i<8;i++){const gx=i*w/8+10;cx.fillRect(gx,groundY-1,3,4);cx.fillRect(gx+5,groundY-2,2,5)}
+
+  // ── TREES (left & right) ──
+  [[bldgL-22,groundY],[bldgR+14,groundY],[bldgL-40,groundY],[bldgR+32,groundY]].forEach(([tx,ty],ti)=>{
+    const sz=ti<2?.9:.6;
+    cx.fillStyle='#5A3A1A';cx.fillRect(tx,ty-18*sz,4*sz,18*sz);
+    cx.fillStyle='#3A8A3A';cx.beginPath();cx.arc(tx+2*sz,ty-22*sz,10*sz,0,Math.PI*2);cx.fill();
+    cx.fillStyle='#2A7A2A';cx.beginPath();cx.arc(tx+5*sz,ty-25*sz,7*sz,0,Math.PI*2);cx.fill();
+    cx.fillStyle='#4A9A4A';cx.beginPath();cx.arc(tx-2*sz,ty-20*sz,6*sz,0,Math.PI*2);cx.fill();
+  });
+
+  // ── BUILDING EXTERIOR (side walls for depth) ──
+  // Left wall (dark side)
+  cx.fillStyle='#8A7A6A';cx.fillRect(bldgL,startY,4,groundY-startY);
+  // Right wall
+  cx.fillStyle='#9A8A7A';cx.fillRect(bldgR-4,startY,4,groundY-startY);
+
+  // ── ROOFTOP ──
+  // Main roof slab
+  cx.fillStyle='#7A6A5A';cx.fillRect(bldgL-4,startY-8,bldgW+8,10);
+  cx.fillStyle='#6A5A4A';cx.fillRect(bldgL-2,startY-10,bldgW+4,4);
+  // Railing
+  for(let rx=bldgL;rx<bldgR;rx+=12){cx.fillStyle='#8A8A8A';cx.fillRect(rx,startY-18,2,10);cx.fillStyle='#9A9A9A';cx.fillRect(rx,startY-18,12,2)}
+
+  // Water tank
+  const wtX=bldgL+bldgW*.15;
+  cx.fillStyle='#888';cx.fillRect(wtX,startY-36,16,18);
+  cx.fillStyle='#999';cx.fillRect(wtX-1,startY-38,18,4);
+  cx.fillStyle='#777';cx.fillRect(wtX+5,startY-32,2,8);
+
+  // AC unit
+  const acX=bldgL+bldgW*.7;
+  cx.fillStyle='#AAA';cx.fillRect(acX,startY-24,20,14);
+  cx.fillStyle='#999';cx.fillRect(acX+2,startY-22,7,4);cx.fillRect(acX+11,startY-22,7,4);
+  // AC fan spin
+  if(S.agents.some(a=>a.st==='work')){
+    cx.fillStyle='#BBB';cx.save();cx.translate(acX+10,startY-15);cx.rotate(fr*.2);
+    cx.fillRect(-4,-1,8,2);cx.fillRect(-1,-4,2,8);cx.restore();
+  }
+
+  // ── SIGN (neon-style) ──
+  const signW=bldgW*.55, signH=22, signX=bldgL+(bldgW-signW)/2, signY2=startY-44;
+  cx.fillStyle='#1A1A3A';cx.fillRect(signX,signY2,signW,signH);
+  cx.strokeStyle='#8B6914';cx.lineWidth=2;cx.strokeRect(signX,signY2,signW,signH);
+  // Neon glow
+  const glowAlpha=(.7+Math.sin(fr*.08)*.3);
+  cx.fillStyle=`rgba(255,208,128,${glowAlpha})`;cx.font='bold 13px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';
+  cx.textAlign='center';cx.fillText('에이전트 개발국',bldgL+bldgW/2,signY2+15);
+  // Sign light bulbs
+  for(let lb=0;lb<6;lb++){
+    const lx=signX+8+lb*(signW-16)/5;
+    cx.fillStyle=fr%20<10+lb?'#FFD080':'#FFD08040';
+    cx.beginPath();cx.arc(lx,signY2-3,2,0,Math.PI*2);cx.fill();
+  }
+
+  // ── ANTENNA ──
+  cx.fillStyle='#666';cx.fillRect(bldgL+bldgW*.5-1,startY-64,3,22);
+  cx.fillStyle='#888';cx.fillRect(bldgL+bldgW*.5-6,startY-52,4,1);cx.fillRect(bldgL+bldgW*.5+3,startY-52,4,1);
+  cx.fillStyle='#CC2200';cx.fillRect(bldgL+bldgW*.5-2,startY-67,5,4);
+  // Blink
+  if(fr%40<20){cx.fillStyle='#FF000060';cx.beginPath();cx.arc(bldgL+bldgW*.5+.5,startY-65,5+Math.sin(fr*.1)*2,0,Math.PI*2);cx.fill()}
+  // Signal waves
+  if(S.connected){
+    cx.strokeStyle='#44DD6640';cx.lineWidth=1;
+    for(let sw=0;sw<3;sw++){
+      const sr=8+sw*6+(fr*.1%6);cx.globalAlpha=Math.max(0,1-sr/30);
+      cx.beginPath();cx.arc(bldgL+bldgW*.5+.5,startY-65,sr,-.8,-2.3,true);cx.stroke();
+    }
+    cx.globalAlpha=1;
+  }
+
+  // ── ELEVATOR SHAFT ──
+  const eX=bldgR-bldgW*.14, eW=bldgW*.1;
+  const eTop=startY, eBot=groundY;
+  cx.fillStyle='#2A2A3A';cx.fillRect(eX,eTop,eW,eBot-eTop);
+  // Shaft rails
+  cx.fillStyle='#4A4A5A';cx.fillRect(eX+1,eTop,2,eBot-eTop);cx.fillRect(eX+eW-3,eTop,2,eBot-eTop);
+  // Cable
+  cx.fillStyle='#555';cx.fillRect(eX+eW/2,eTop,1,eBot-eTop);
+  // Elevator car
+  const eCabY=eTop+(eBot-eTop)*.5+Math.sin(fr*.02)*(eBot-eTop)*.2;
+  cx.fillStyle='#8888AA';cx.fillRect(eX+3,eCabY-8,eW-6,16);
+  cx.fillStyle='#6666AA';cx.fillRect(eX+eW/2-3,eCabY-6,6,12);
+  cx.fillStyle='#AAAACC';cx.fillRect(eX+eW/2-1,eCabY-7,2,1);
+  // Shaft floor markers
+  for(let fi=0;fi<3;fi++){
+    const fy=startY+(2-fi)*(floorH+margin)+floorH/2;
+    cx.fillStyle=fi===S.currentFloor?'#FFD080':'#555';
+    cx.fillRect(eX-1,fy-1,2,2);
+    cx.font='7px monospace';cx.textAlign='right';cx.fillText((fi+1)+'F',eX-3,fy+2);
+  }
+
+  // ── ENTRANCE (at ground level) ──
+  const entX=bldgL+bldgW*.4, entW=bldgW*.2;
+  // Awning
+  cx.fillStyle='#CC6600';cx.fillRect(entX-6,groundY-16,entW+12,4);
+  const awG=cx.createLinearGradient(0,groundY-12,0,groundY-4);
+  awG.addColorStop(0,'#DD7720');awG.addColorStop(1,'#CC660080');
+  cx.fillStyle=awG;cx.beginPath();cx.moveTo(entX-6,groundY-12);cx.lineTo(entX+entW+6,groundY-12);
+  cx.lineTo(entX+entW+2,groundY-4);cx.lineTo(entX-2,groundY-4);cx.fill();
+  // Door
+  cx.fillStyle='#4A3A2A';cx.fillRect(entX,groundY-12,entW,12);
+  cx.fillStyle='#3A2A1A';cx.fillRect(entX+entW/2-1,groundY-12,2,12);
+  cx.fillStyle='#FFD080';cx.fillRect(entX+entW/2-6,groundY-7,4,2);cx.fillRect(entX+entW/2+2,groundY-7,4,2);
+  // Steps
+  cx.fillStyle='#B0A090';cx.fillRect(entX-2,groundY,entW+4,3);
+  cx.fillStyle='#A09080';cx.fillRect(entX-4,groundY+3,entW+8,2);
+
+  // ── STREET LAMP ──
+  const lampX=bldgL-12;
+  cx.fillStyle='#555';cx.fillRect(lampX,groundY-40,3,40);
+  cx.fillStyle='#666';cx.fillRect(lampX-4,groundY-42,11,4);
+  if(isNight||isEvening){
+    cx.fillStyle='#FFDD6640';cx.beginPath();cx.arc(lampX+1.5,groundY-40,18,0,Math.PI*2);cx.fill();
+    cx.fillStyle='#FFEE88';cx.beginPath();cx.arc(lampX+1.5,groundY-40,4,0,Math.PI*2);cx.fill();
+  }else{
+    cx.fillStyle='#DDD';cx.beginPath();cx.arc(lampX+1.5,groundY-40,3,0,Math.PI*2);cx.fill();
+  }
+
+  // ── FLOORS (bottom=1F, top=3F) ──
   for(let fi=2;fi>=0;fi--){
     const fl=FLOORS[fi], fc=fl.colors;
     const fy=startY+(2-fi)*(floorH+margin);
+    const flL=bldgL+4, flR=eX-2, flW=flR-flL;
+
+    // Wall gradient
     const wallG=cx.createLinearGradient(0,fy,0,fy+floorH);
-    wallG.addColorStop(0,fc.wall[0]);wallG.addColorStop(1,fc.wall[1]);
-    cx.fillStyle=wallG;cx.fillRect(w*.12,fy,w*.75,floorH);
-    cx.fillStyle=fc.floor[0];cx.fillRect(w*.12,fy+floorH*.78,w*.75,floorH*.22);
+    wallG.addColorStop(0,fc.wall[0]);wallG.addColorStop(.7,fc.wall[1]);wallG.addColorStop(1,fc.wall[2]||fc.wall[1]);
+    cx.fillStyle=wallG;cx.fillRect(flL,fy,flW,floorH);
+
+    // Floor tile
+    const flrG=cx.createLinearGradient(0,fy+floorH*.78,0,fy+floorH);
+    flrG.addColorStop(0,fc.floor[0]);flrG.addColorStop(1,fc.floor[1]);
+    cx.fillStyle=flrG;cx.fillRect(flL,fy+floorH*.78,flW,floorH*.22);
+
+    // Ceiling line
+    cx.fillStyle='#00000015';cx.fillRect(flL,fy,flW,2);
+    // Baseboard
+    cx.fillStyle='#6B4E00';cx.fillRect(flL,fy+floorH-2,flW,3);
+
+    // ── Windows (exterior visible in cross-section) ──
+    const winCount=4, winW2=flW*.1, winH2=floorH*.3;
+    for(let wi=0;wi<winCount;wi++){
+      const wx=flL+flW*.08+wi*(flW*.22), wy=fy+floorH*.15;
+      // Window frame
+      cx.fillStyle='#5A4A3A';cx.fillRect(wx-2,wy-2,winW2+4,winH2+4);
+      // Window pane (sky reflection or interior glow)
+      if(isNight){
+        const isLit=S.agents.some(a=>a.floor===fi&&a.st==='work')||Math.random()>.3;
+        cx.fillStyle=isLit?'#FFE8A060':'#333850';
+      }else{
+        cx.fillStyle='#88BBEE50';
+      }
+      cx.fillRect(wx,wy,winW2,winH2);
+      // Cross frame
+      cx.fillStyle='#5A4A3A';cx.fillRect(wx+winW2/2-1,wy,2,winH2);cx.fillRect(wx,wy+winH2/2-1,winW2,2);
+    }
+
+    // ── Ceiling Light ──
+    const lightX=flL+flW*.5;
+    cx.fillStyle='#888';cx.fillRect(lightX-8,fy+2,16,3);
+    cx.fillStyle=fc.accent;cx.fillRect(lightX-6,fy+5,12,2);
+    if(S.agents.some(a=>a.floor===fi&&a.st==='work')){
+      cx.fillStyle=fc.accent+'20';cx.fillRect(lightX-30,fy+5,60,floorH*.4);
+    }
+
+    // ── Floor-specific decorations ──
+    if(fi===0){
+      // 1F: Small server rack
+      cx.fillStyle='#2A2A3A';cx.fillRect(flL+6,fy+floorH*.25,8,floorH*.5);
+      cx.fillStyle='#0A0A1A';cx.fillRect(flL+7,fy+floorH*.28,6,floorH*.44);
+      for(let li=0;li<4;li++){cx.fillStyle=fr%20<10+li*3?'#44DD66':'#226633';cx.fillRect(flL+8,fy+floorH*.3+li*5,2,2)}
+      // Potted plant
+      cx.fillStyle='#6A4A2A';cx.fillRect(flR-14,fy+floorH*.6,8,floorH*.18);
+      cx.fillStyle='#3A8A3A';cx.beginPath();cx.arc(flR-10,fy+floorH*.55,6,0,Math.PI*2);cx.fill();
+    }else if(fi===1){
+      // 2F: Bookshelf
+      cx.fillStyle='#5A3A1A';cx.fillRect(flL+4,fy+floorH*.2,12,floorH*.58);
+      ['#CC4444','#4488CC','#44AA66','#DDAA22','#8866CC'].forEach((bc,bi)=>{
+        cx.fillStyle=bc;cx.fillRect(flL+5+bi*2,fy+floorH*.22,2,floorH*.12);
+        cx.fillRect(flL+5+bi*2,fy+floorH*.38,2,floorH*.12);
+        cx.fillRect(flL+6+bi*2,fy+floorH*.54,2,floorH*.12);
+      });
+      // Whiteboard
+      cx.fillStyle='#DDD';cx.fillRect(flR-20,fy+floorH*.2,14,10);
+      cx.fillStyle='#AAA';cx.fillRect(flR-19,fy+floorH*.2+1,12,8);
+      cx.fillStyle='#44AA66';cx.fillRect(flR-18,fy+floorH*.2+7,3,1);cx.fillRect(flR-14,fy+floorH*.2+6,2,2);cx.fillRect(flR-11,fy+floorH*.2+4,3,4);
+    }else{
+      // 3F: World map poster
+      cx.fillStyle='#E8D8C0';cx.fillRect(flL+4,fy+floorH*.2,16,10);
+      cx.fillStyle='#6A9A6A';cx.fillRect(flL+6,fy+floorH*.22,4,3);cx.fillRect(flL+12,fy+floorH*.24,3,4);cx.fillRect(flL+8,fy+floorH*.25,2,2);
+      // Clock
+      const clkX=flR-12, clkY=fy+floorH*.25;
+      cx.fillStyle='#FFF';cx.beginPath();cx.arc(clkX,clkY,5,0,Math.PI*2);cx.fill();
+      cx.fillStyle='#333';cx.beginPath();cx.arc(clkX,clkY,5.5,0,Math.PI*2);cx.stroke();
+      const h2=new Date().getHours()%12, m2=new Date().getMinutes();
+      cx.strokeStyle='#333';cx.lineWidth=1;
+      cx.beginPath();cx.moveTo(clkX,clkY);cx.lineTo(clkX+Math.sin(h2/12*Math.PI*2)*3,clkY-Math.cos(h2/12*Math.PI*2)*3);cx.stroke();
+      cx.beginPath();cx.moveTo(clkX,clkY);cx.lineTo(clkX+Math.sin(m2/60*Math.PI*2)*4,clkY-Math.cos(m2/60*Math.PI*2)*4);cx.stroke();
+    }
+
     // Current floor highlight
-    if(fi===S.currentFloor){cx.strokeStyle='#FFD080';cx.lineWidth=3;cx.strokeRect(w*.12-1,fy-1,w*.75+2,floorH+2)}
-    cx.fillStyle='#6B4E00';cx.fillRect(w*.12,fy+floorH-2,w*.75,3);
-    // Floor label
-    cx.fillStyle='#00000060';cx.fillRect(w*.13,fy+4,85,16);
-    cx.fillStyle=fc.accent;cx.font='bold 10px -apple-system,sans-serif';cx.textAlign='left';cx.fillText(fl.nameKo,w*.14,fy+15);
-    // Working glow
-    const working=S.agents.filter(a=>a.floor===fi&&a.st==='work').length;
-    if(working>0){cx.fillStyle=fc.accent+'25';cx.fillRect(w*.12,fy,w*.75,floorH)}
-    // Mini desks + agents
+    if(fi===S.currentFloor){
+      cx.strokeStyle='#FFD080';cx.lineWidth=2;cx.strokeRect(flL-1,fy-1,flW+2,floorH+2);
+      // Arrow indicator
+      cx.fillStyle='#FFD080';cx.beginPath();cx.moveTo(flL-8,fy+floorH/2);cx.lineTo(flL-2,fy+floorH/2-5);cx.lineTo(flL-2,fy+floorH/2+5);cx.fill();
+    }
+
+    // Floor label badge
+    cx.fillStyle='#00000070';
+    const lblW=82, lblH=14;
+    cx.fillRect(flL+4,fy+3,lblW,lblH);
+    cx.fillStyle=fc.accent;cx.font='bold 9px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';cx.textAlign='left';
+    cx.fillText(fl.nameKo,flL+7,fy+13);
+
+    // Working glow pulse
+    const workCount=S.agents.filter(a=>a.floor===fi&&a.st==='work').length;
+    if(workCount>0){
+      const pulse=Math.sin(fr*.08)*.08+.12;
+      cx.fillStyle=fc.accent+Math.floor(pulse*255).toString(16).padStart(2,'0');
+      cx.fillRect(flL,fy,flW,floorH);
+    }
+
+    // ── Mini Desks ──
     const floorDesks2=[];DESKS.forEach((d,di)=>{if(d.floor===fi)floorDesks2.push({d,di})});
     floorDesks2.forEach(({d,di})=>{
-      const dx2=w*.12+d.x*w*.72, dy2=fy+floorH*.55;
-      cx.fillStyle='#A07848';cx.fillRect(dx2-8,dy2,16,4);
-      cx.fillStyle='#333';cx.fillRect(dx2-4,dy2-8,8,7);
-      cx.fillStyle='#0A0A2A';cx.fillRect(dx2-3,dy2-7,6,5);
-      if(d.act){cx.fillStyle=C[AT[di]].s+'80';cx.fillRect(dx2-3,dy2-7,6,5)}
+      const dx2=flL+d.x*flW, dy2=fy+floorH*.6;
+      // Desk body
+      cx.fillStyle='#B08858';cx.fillRect(dx2-10,dy2,20,5);
+      cx.fillStyle='#9A7848';cx.fillRect(dx2-9,dy2+5,3,4);cx.fillRect(dx2+6,dy2+5,3,4);
+      // Monitor
+      cx.fillStyle='#333';cx.fillRect(dx2-5,dy2-10,10,9);
+      cx.fillStyle='#0A0A2A';cx.fillRect(dx2-4,dy2-9,8,7);
+      // Monitor content
+      if(d.act){
+        cx.fillStyle=C[AT[di]].s+'90';cx.fillRect(dx2-4,dy2-9,8,7);
+        // Screen glow
+        cx.fillStyle=C[AT[di]].s+'15';cx.fillRect(dx2-8,dy2-14,16,18);
+      }else{
+        // Idle screen lines
+        cx.fillStyle='#1A2A4A';cx.fillRect(dx2-3,dy2-8,6,1);cx.fillRect(dx2-3,dy2-6,4,1);cx.fillRect(dx2-3,dy2-4,5,1);
+      }
+      // Monitor stand
+      cx.fillStyle='#555';cx.fillRect(dx2-1,dy2-1,2,2);
+      // Desk label
+      cx.fillStyle='#8B7860';cx.font='7px -apple-system,sans-serif';cx.textAlign='center';cx.fillText(d.label,dx2,dy2+14);
     });
+
+    // ── Mini Agents (chibi) ──
     S.agents.filter(a=>a.floor===fi).forEach(a=>{
-      const ax2=w*.12+a.x*w*.72, ay2=fy+a.y*floorH*.7+floorH*.15;
-      const cc=C[a.t], ms=1.8;
-      cx.fillStyle='#00000020';cx.fillRect(ax2-3*ms,ay2+4*ms,6*ms,1.5*ms);
-      cx.fillStyle=cc.s;cx.fillRect(ax2-2*ms,ay2,4*ms,4*ms);
-      cx.fillStyle='#FFD8B0';cx.fillRect(ax2-2.5*ms,ay2-3*ms,5*ms,3.5*ms);
-      cx.fillStyle=cc.h;cx.fillRect(ax2-2.8*ms,ay2-3.5*ms,5.6*ms,1.5*ms);
-      cx.fillStyle='#222';cx.fillRect(ax2-1.2*ms,ay2-1.8*ms,.8*ms,.8*ms);cx.fillRect(ax2+.4*ms,ay2-1.8*ms,.8*ms,.8*ms);
-      if(a.st==='work'){cx.fillStyle=cc.s+'60';cx.fillRect(ax2-4*ms,ay2-4*ms,8*ms,9*ms);cx.fillStyle='#FFD080';cx.fillRect(ax2+3*ms,ay2-3.5*ms,2*ms,2*ms)}
+      const ax2=flL+a.x*flW, ay2=fy+a.y*floorH*.6+floorH*.2;
+      const cc=C[a.t], ms=2;
+      const bob=a.st==='work'?Math.sin(fr*.12+a.i)*.8:0;
+
+      // Shadow
+      cx.fillStyle='#00000018';cx.beginPath();cx.ellipse(ax2,ay2+5*ms,3.5*ms,1.2*ms,0,0,Math.PI*2);cx.fill();
+
+      // Body
+      cx.fillStyle=cc.s;
+      cx.fillRect(ax2-2.5*ms,ay2+bob,5*ms,4*ms);
+      // Arms
+      if(a.st==='work'){
+        const tL=Math.sin(fr*.4+a.i)*1, tR=Math.sin(fr*.4+a.i+3.14)*1;
+        cx.fillRect(ax2-3.5*ms,ay2+1*ms+tL+bob,1.5*ms,2.5*ms);
+        cx.fillRect(ax2+2*ms,ay2+1*ms+tR+bob,1.5*ms,2.5*ms);
+      }
+      // Head
+      cx.fillStyle='#FFD8B0';cx.fillRect(ax2-3*ms,ay2-3.5*ms+bob,6*ms,4*ms);
+      // Hair
+      cx.fillStyle=cc.h;cx.fillRect(ax2-3.2*ms,ay2-4*ms+bob,6.4*ms,2*ms);
+      cx.fillRect(ax2-3.2*ms,ay2-2.5*ms+bob,1.5*ms,1.5*ms);cx.fillRect(ax2+1.7*ms,ay2-2.5*ms+bob,1.5*ms,1.5*ms);
+      // Eyes
+      const blink=fr%100<3;
+      if(!blink){
+        cx.fillStyle='#222';cx.fillRect(ax2-1.5*ms,ay2-2*ms+bob,ms*.9,ms*.9);cx.fillRect(ax2+.6*ms,ay2-2*ms+bob,ms*.9,ms*.9);
+        cx.fillStyle='#FFF';cx.fillRect(ax2-1.3*ms,ay2-2*ms+bob,ms*.3,ms*.3);cx.fillRect(ax2+.8*ms,ay2-2*ms+bob,ms*.3,ms*.3);
+      }else{
+        cx.fillStyle='#222';cx.fillRect(ax2-1.5*ms,ay2-1.5*ms+bob,ms*.9,ms*.3);cx.fillRect(ax2+.6*ms,ay2-1.5*ms+bob,ms*.9,ms*.3);
+      }
+      // Legs
+      cx.fillStyle=cc.p;cx.fillRect(ax2-2*ms,ay2+4*ms+bob,2*ms,1.5*ms);cx.fillRect(ax2,ay2+4*ms+bob,2*ms,1.5*ms);
+
+      // Work effect
+      if(a.st==='work'){
+        // Speech bubble with tool icon
+        cx.fillStyle='#FFF';cx.beginPath();
+        cx.moveTo(ax2+3*ms,ay2-4.5*ms+bob);cx.lineTo(ax2+3*ms,ay2-8*ms+bob);cx.lineTo(ax2+9*ms,ay2-8*ms+bob);
+        cx.lineTo(ax2+9*ms,ay2-4.5*ms+bob);cx.lineTo(ax2+5*ms,ay2-4.5*ms+bob);cx.lineTo(ax2+4*ms,ay2-3.5*ms+bob);cx.lineTo(ax2+3.5*ms,ay2-4.5*ms+bob);cx.fill();
+        cx.fillStyle=cc.s;cx.font='bold 6px monospace';cx.textAlign='center';cx.fillText(cc.e,ax2+6*ms,ay2-5.5*ms+bob);
+        // Activity sparkle
+        if(fr%8<4){cx.fillStyle=cc.s;cx.fillRect(ax2+3*ms,ay2-6*ms+bob,1.5,1.5)}
+      }
     });
   }
-  // Elevator packets
+
+  // ── ELEVATOR PACKETS ──
   S.elevatorPackets.forEach(ep=>{
     const fromY=startY+(2-ep.from)*(floorH+margin)+floorH/2;
     const toY=startY+(2-ep.to)*(floorH+margin)+floorH/2;
     const y=fromY+(toY-fromY)*ep.progress;
-    cx.fillStyle=ep.color;cx.globalAlpha=1-ep.progress*.3;
-    cx.fillRect(eX+eW/2-3,y-3,6,6);cx.globalAlpha=1;
+    const alpha=1-ep.progress*.4;
+    // Packet glow
+    cx.fillStyle=ep.color+'40';cx.globalAlpha=alpha;cx.beginPath();cx.arc(eX+eW/2,y,8,0,Math.PI*2);cx.fill();
+    // Packet core
+    cx.fillStyle=ep.color;cx.fillRect(eX+eW/2-4,y-4,8,8);
+    cx.fillStyle='#FFF';cx.fillRect(eX+eW/2-2,y-2,4,4);
+    // Trail
+    const trailDir=ep.to>ep.from?-1:1;
+    for(let ti=1;ti<=3;ti++){
+      cx.globalAlpha=alpha*(1-ti*.25);cx.fillStyle=ep.color;cx.fillRect(eX+eW/2-2,y+trailDir*ti*5-1,4,3);
+    }
+    cx.globalAlpha=1;
   });
+
+  // ── BIRDS/BUTTERFLIES (ambient) ──
+  if(!isNight){
+    for(let bi=0;bi<2;bi++){
+      const bx=((fr*.3+bi*150)%w), by=h*.05+bi*h*.06+Math.sin(fr*.03+bi*3)*10;
+      cx.fillStyle='#33333360';
+      cx.beginPath();cx.moveTo(bx,by);cx.lineTo(bx-4-Math.sin(fr*.15+bi)*3,by-2);cx.lineTo(bx,by+1);cx.fill();
+      cx.beginPath();cx.moveTo(bx,by);cx.lineTo(bx+4+Math.sin(fr*.15+bi)*3,by-2);cx.lineTo(bx,by+1);cx.fill();
+    }
+  }
 }
 
 // ══════════════════════════════════════════
