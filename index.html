@@ -416,6 +416,7 @@ let bg=null,bgW=0,bgH=0;
 let dpr=Math.min(window.devicePixelRatio||1,2);
 function resize(){
   const rect=cv.parentElement.getBoundingClientRect();
+  if(rect.width<10||rect.height<10)return; // Guard: layout not ready
   dpr=Math.min(window.devicePixelRatio||1,2);
   cv.width=rect.width*dpr;
   cv.height=rect.height*dpr;
@@ -797,6 +798,7 @@ function drawBub(x,y,t){
 
 // ── BACKGROUND CACHE ──
 function buildBg(w,h){
+  if(w<10||h<10)return;
   const o=document.createElement('canvas');o.width=w*dpr;o.height=h*dpr;
   const g=o.getContext('2d');
   g.setTransform(dpr,0,0,dpr,0,0);
@@ -1268,6 +1270,7 @@ function render(ts){
   if(ts-lastRender<33)return;
   lastRender=ts;
   const w=cW(),h=cH();
+  if(w<10||h<10){resize();return;} // Canvas not ready, retry
   if(!bg||bgW!==w||bgH!==h)buildBg(w,h);
   // Screen shake
   let sx=0,sy=0;
@@ -1415,8 +1418,11 @@ function connectWith(url,key,sessionId){
   connParams={url,key,sessionId};
   document.getElementById('setupOverlay').style.display='none';
   document.getElementById('mainApp').style.display='';
-  initCanvas();
-  requestAnimationFrame(render);
+  // Wait for browser layout reflow before measuring canvas
+  requestAnimationFrame(()=>{
+    initCanvas();
+    requestAnimationFrame(render);
+  });
 
   const sbLib=window.supabase;
   if(!sbLib||!sbLib.createClient){
