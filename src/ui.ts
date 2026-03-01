@@ -1,83 +1,83 @@
-// ── ui.js ── Toast, narration, panel system, sparkline/heatmap SVG, panel content rendering, throttled UI update
+// ── ui.ts ── Toast, narration, panel system, sparkline/heatmap SVG, panel content rendering, throttled UI update
 import {
   S, C, FLOORS, AT, DESKS, GROUPS,
   NR, MCP_SERVERS, SKILL_CATEGORIES, WORKER_ROLES,
-} from './state.js';
-import { tk, desc, esc, pick, getSessionLabel, getActivityIntensity, toolGroup } from './utils.js';
-import { getToolSummary } from './game-systems.js';
+} from './state.ts';
+import { tk, desc, esc, pick, getSessionLabel, getActivityIntensity, toolGroup } from './utils.ts';
+import { getToolSummary, type ToolSummaryEntry } from './game-systems.ts';
 
 // ══════════════════════════════════════════════════════
 // ── TOAST SYSTEM ──
 // ══════════════════════════════════════════════════════
-export function toast(msg, type = 'in') {
+export function toast(msg: string, type: string = 'in'): void {
   const wrap = document.getElementById('toastWrap'); if (!wrap) return;
   const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;
   wrap.appendChild(el); requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => { el.classList.remove('show'); el.classList.add('hide'); setTimeout(() => el.remove(), 300); }, 2500);
-  while (wrap.children.length > 3) wrap.firstChild.remove();
+  while (wrap.children.length > 3) (wrap.firstChild as ChildNode).remove();
 }
 
 // ══════════════════════════════════════════════════════
 // ── NARRATION (typewriter) ──
 // ══════════════════════════════════════════════════════
-export function narr(t, at) {
-  document.getElementById('nf').textContent = at ? (C[at]?.l || 'SYS') : 'SYS';
-  S.nFull = t; S.nIdx = 0; S.nTxt = ''; clearInterval(S.nTm);
+export function narr(t: string, at?: string): void {
+  const nfEl = document.getElementById('nf'); if (nfEl) nfEl.textContent = at ? (C[at]?.l || 'SYS') : 'SYS';
+  S.nFull = t; S.nIdx = 0; S.nTxt = ''; clearInterval(S.nTm!);
   S.nTm = setInterval(() => {
     if (S.nIdx < S.nFull.length) {
       S.nTxt += S.nFull[S.nIdx++];
-      document.getElementById('nt').textContent = S.nTxt;
-    } else clearInterval(S.nTm);
+      const ntEl = document.getElementById('nt'); if (ntEl) ntEl.textContent = S.nTxt;
+    } else clearInterval(S.nTm!);
   }, 35);
 }
 
 // ══════════════════════════════════════════════════════
 // ── PANEL SYSTEM ──
 // ══════════════════════════════════════════════════════
-export function openPanel(name) {
+export function openPanel(name?: string): void {
   S.currentPanel = name || 'log'; S.panelOpen = true;
-  document.getElementById('panelOverlay').classList.add('open');
-  document.getElementById('fabBtn').classList.add('hide');
+  document.getElementById('panelOverlay')!.classList.add('open');
+  document.getElementById('fabBtn')!.classList.add('hide');
   switchTab(S.currentPanel); renderPanel();
   document.querySelectorAll('.bnav .nb').forEach(b => {
-    b.classList.toggle('active', b.dataset.p === S.currentPanel);
+    (b as HTMLElement).classList.toggle('active', (b as HTMLElement).dataset.p === S.currentPanel);
   });
   if (name === 'log') { S.newLogCount = 0; updateBadge('logBadge', 0); }
 }
 
-export function closePanel(e) {
+export function closePanel(e?: MouseEvent): void {
   if (e && e.target !== e.currentTarget) return;
   S.panelOpen = false;
-  document.getElementById('panelOverlay').classList.remove('open');
-  document.getElementById('fabBtn').classList.remove('hide');
+  document.getElementById('panelOverlay')!.classList.remove('open');
+  document.getElementById('fabBtn')!.classList.remove('hide');
 }
 
-export function switchTab(name) {
+export function switchTab(name: string): void {
   S.currentPanel = name;
-  document.querySelectorAll('.ptab').forEach(t => t.classList.toggle('active', t.dataset.p === name));
-  document.querySelectorAll('.bnav .nb').forEach(b => b.classList.toggle('active', b.dataset.p === name));
+  document.querySelectorAll('.ptab').forEach(t => (t as HTMLElement).classList.toggle('active', (t as HTMLElement).dataset.p === name));
+  document.querySelectorAll('.bnav .nb').forEach(b => (b as HTMLElement).classList.toggle('active', (b as HTMLElement).dataset.p === name));
   renderPanel();
 }
 
-export function updateBadge(id, n) {
+export function updateBadge(id: string, n: number): void {
   const el = document.getElementById(id); if (!el) return;
-  el.textContent = n; el.classList.toggle('show', n > 0);
+  el.textContent = String(n); el.classList.toggle('show', n > 0);
 }
 
 // ══════════════════════════════════════════════════════
 // ── SPARKLINE / HEATMAP SVG ──
 // ══════════════════════════════════════════════════════
-export function drawSparkSvg(data, color, w, h) {
+export function drawSparkSvg(data: number[], color: string, w: number, h: number): string {
   if (data.length < 2) return '';
   const max = Math.max(1, ...data),
     pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - v / max * (h - 2) + 1}`).join(' ');
   return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
 }
 
-export function renderHeatmapSvg() {
+export function renderHeatmapSvg(): string {
   const cW2 = 280, cH2 = 110, padL = 28, padT = 16,
     gw = (cW2 - padL) / 24, gh = (cH2 - padT) / 7;
-  const mx = Math.max(1, ...S.heatmap.flat());
+  const mx = Math.max(1, ...S.heatmap.map(row => Math.max(...row)));
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   let s = '<div class="heatmap-wrap"><svg width="' + cW2 + '" height="' + cH2 + '" style="display:block">';
   for (let d = 0; d < 7; d++) {
@@ -96,7 +96,7 @@ export function renderHeatmapSvg() {
 // ══════════════════════════════════════════════════════
 // ── PANEL CONTENT RENDERING ──
 // ══════════════════════════════════════════════════════
-export function renderPanel() {
+export function renderPanel(): void {
   const body = document.getElementById('panelBody'); if (!body) return;
   switch (S.currentPanel) {
     case 'log': body.innerHTML = rLogHTML(); break;
@@ -112,16 +112,16 @@ export function renderPanel() {
 }
 
 // ── Log Panel ──
-export function rLogHTML() {
-  return S.entries.slice(-40).reverse().map(e => {
+export function rLogHTML(): string {
+  return (S.entries as Record<string, unknown>[]).slice(-40).reverse().map(e => {
     const cl = e.decision === 'deny' ? 'er' : e.err ? 'er' : e.decision === 'allow' ? 'ok' : e.level === 'warn' ? 'wr' : 'in';
-    const tm = (e.ts || '').slice(11, 19), tl = tk(e.tool);
+    const tm = ((e.ts as string) || '').slice(11, 19), tl = tk((e.tool as string) || '');
     const gBadge = e.group ? `<span style="color:#8B7860;font-size:8px;margin-right:2px">${e.group}</span>` : '';
     let dt = '';
-    if (e.err) dt = '\u26a0 ' + e.err.slice(0, 40);
-    else if (e.cmd) dt = e.cmd.slice(0, 50);
-    else if (e.path) dt = e.path.split(/[/\\]/).slice(-2).join('/');
-    else if (e.summary) dt = e.summary.slice(0, 50);
+    if (e.err) dt = '\u26a0 ' + (e.err as string).slice(0, 40);
+    else if (e.cmd) dt = (e.cmd as string).slice(0, 50);
+    else if (e.path) dt = (e.path as string).split(/[/\\]/).slice(-2).join('/');
+    else if (e.summary) dt = (e.summary as string).slice(0, 50);
     else dt = desc(e);
     const seqTag = e.seq ? `<span style="color:#AAA;font-size:8px;margin-right:2px">#${e.seq}</span>` : '';
     return `<div class="le ${cl}">${seqTag}<span class="t">${tm}</span><span class="n">${tl}</span>${gBadge}<span class="m">${esc(dt)}</span></div>`;
@@ -129,34 +129,34 @@ export function rLogHTML() {
 }
 
 // ── Stats / Metrics Panel ──
-export function rStatHTML() {
-  const d = S.entries, m = S.serverMetrics;
-  let successRate = 100, blockRate = 0, opsMin = '0', errs = 0, blocks = 0, total = d.length, sessions = 0, durMin = 0;
-  const grp = { 'file-io': 0, shell: 0, search: 0, external: 0, agent: 0, edit: 0 };
-  if (m && m.total > 0) {
+export function rStatHTML(): string {
+  const d = S.entries as Record<string, unknown>[], m = S.serverMetrics;
+  let successRate = 100, blockRate = 0, opsMin: string | number = '0', errs = 0, blocks = 0, total = d.length, sessions = 0, durMin = 0;
+  const grp: Record<string, number> = { 'file-io': 0, shell: 0, search: 0, external: 0, agent: 0, edit: 0 };
+  if (m && m.total && m.total > 0) {
     successRate = m.successRate || 100; blockRate = m.blockRate || 0;
-    opsMin = m.opsPerMin || 0; errs = m.errorCount || 0; blocks = Math.round(m.blockRate * m.total / 100) || 0;
+    opsMin = m.opsPerMin || 0; errs = m.errorCount || 0; blocks = Math.round((m.blockRate || 0) * m.total / 100) || 0;
     total = m.total; sessions = m.sessions || 0; durMin = m.durationMin || 0;
-    if (m.groups) Object.entries(m.groups).forEach(([k, v]) => { if (grp[k] !== undefined) grp[k] = v.count || v; });
+    if (m.groups) Object.entries(m.groups).forEach(([k, v]) => { if (grp[k] !== undefined) grp[k] = (typeof v === 'object' && v !== null && 'count' in v) ? (v as { count: number }).count : (v as number); });
   } else {
     d.forEach(e => {
       if (!e.tool) return;
-      const g = toolGroup(e.tool);
+      const g = toolGroup(e.tool as string);
       if (grp[g] !== undefined) grp[g]++;
       if (e.ok === false) errs++; if (e.decision === 'deny') blocks++;
     });
     successRate = total > 0 ? ((total - errs) / total * 100) | 0 : 100;
     blockRate = total > 0 ? (blocks / total * 100) | 0 : 0;
-    opsMin = total >= 2 ? (total / Math.max(1, (new Date(d[d.length - 1].ts) - new Date(d[0].ts)) / 6e4)).toFixed(1) : '0';
+    opsMin = total >= 2 ? (total / Math.max(1, (new Date((d[d.length - 1].ts as string)).getTime() - new Date((d[0].ts as string)).getTime()) / 6e4)).toFixed(1) : '0';
   }
 
   let h = '<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:4px 0 8px">시스템 메트릭</div>';
   h += `<div class="sb"><span class="n">성공률</span><div class="b"><div class="f" style="width:${successRate}%;background:${successRate > 90 ? 'var(--ok)' : 'var(--err)'}"></div>${drawSparkSvg(S.sparkData.ops, '#44AA4480', 60, 12)}</div><span class="v">${Math.round(successRate)}%</span></div>`;
   h += `<div class="sb"><span class="n">차단률</span><div class="b"><div class="f" style="width:${Math.min(blockRate * 10, 100)}%;background:var(--err)"></div>${drawSparkSvg(S.sparkData.errs, '#CC330080', 60, 12)}</div><span class="v">${Math.round(blockRate)}%</span></div>`;
-  h += `<div class="sb"><span class="n">속도</span><div class="b"><div class="f" style="width:${Math.min(opsMin * 5, 100)}%;background:var(--info)"></div></div><span class="v">${opsMin}/m</span></div>`;
+  h += `<div class="sb"><span class="n">속도</span><div class="b"><div class="f" style="width:${Math.min(Number(opsMin) * 5, 100)}%;background:var(--info)"></div></div><span class="v">${opsMin}/m</span></div>`;
   h += '<div style="font-size:12px;color:var(--gold-dd);font-weight:bold;margin:10px 0 8px">도구 그룹</div>';
 
-  const gMetrics = [
+  const gMetrics: [string, number, string][] = [
     ['파일I/O', grp['file-io'] + grp.edit, 'var(--ok)'],
     ['셸', grp.shell, '#FF6644'],
     ['검색', grp.search, 'var(--info)'],
@@ -206,7 +206,7 @@ export function rStatHTML() {
 }
 
 // ── Agents Panel ──
-export function rAgHTML() {
+export function rAgHTML(): string {
   const agents = S.agents;
   if (!agents || !agents.length) return '<div style="text-align:center;color:#8B7860;padding:20px">에이전트 초기화 대기 중...</div>';
   const toolSum = getToolSummary();
@@ -218,15 +218,15 @@ export function rAgHTML() {
       stC = a.st === 'work' ? 'var(--warm-red)' : a.st === 'walk' ? 'var(--accent-gold)' : 'var(--muted-teal)';
     // Gather tool stats for this agent's tools
     const agentTools = Object.entries(toolSum).filter(([t]) => {
-      const map = { bash: ['Bash'], reader: ['Read'], writer: ['Write', 'Edit', 'NotebookEdit'], finder: ['Grep', 'Glob'], mcp: [], agent: ['Task', 'Skill', 'TaskCreate', 'TaskUpdate'], web: ['WebSearch', 'WebFetch'], serena: [] };
+      const map: Record<string, string[]> = { bash: ['Bash'], reader: ['Read'], writer: ['Write', 'Edit', 'NotebookEdit'], finder: ['Grep', 'Glob'], mcp: [], agent: ['Task', 'Skill', 'TaskCreate', 'TaskUpdate'], web: ['WebSearch', 'WebFetch'], serena: [] };
       const toolList = map[a.t] || [];
       if (a.t === 'mcp') return t.startsWith('mcp__') && !t.startsWith('mcp__serena');
       if (a.t === 'serena') return t.startsWith('mcp__serena');
       return toolList.includes(t);
-    });
+    }) as [string, ToolSummaryEntry][];
     const totalCalls = agentTools.reduce((s, [, v]) => s + v.calls, 0);
     const totalErrs = agentTools.reduce((s, [, v]) => s + v.errors, 0);
-    const lastCmd = agentTools.length > 0 ? agentTools.sort((a2, b) => (b[1].lastTime || '') > (a2[1].lastTime || '') ? 1 : -1)[0][1].lastCmd : '';
+    const lastCmd = agentTools.length > 0 ? agentTools.sort((a2, b) => ((b[1].lastTime || '') > (a2[1].lastTime || '') ? 1 : -1))[0][1].lastCmd : '';
     return `<div class="ac${act}"><div class="fc" style="background:${a.st === 'work' ? c.s : 'var(--cream)'};color:${a.st === 'work' ? '#FFF' : c.s};font-family:monospace;font-weight:bold">${c.e}</div><div class="i"><div class="nm">${c.l} <span class="rl">${c.r} | ${a.tot}ops</span></div><div class="tk"><span style="color:${stC};font-weight:bold;font-size:9px">[${st}]</span> ${esc(txt.slice(0, 40))}</div>` +
       `<div style="font-size:10px;margin-top:3px;color:#8B7860">호출: <b>${totalCalls}</b> | 에러: <b style="color:${totalErrs > 0 ? 'var(--err)' : 'inherit'}">${totalErrs}</b></div>` +
       (lastCmd ? `<div style="font-size:9px;color:#AAA;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(lastCmd.slice(0, 50))}</div>` : '') +
@@ -235,7 +235,7 @@ export function rAgHTML() {
 }
 
 // ── Command Panel ──
-export function rCmdHTML() {
+export function rCmdHTML(): string {
   let h = '<div class="cmd-area">';
   h += '<div class="cmd-row"><input id="cmdInput" placeholder="명령 입력..." onkeydown="if(event.key===\'Enter\')sendCmd()"><button onclick="sendCmd()">전송</button></div>';
   h += '<div class="quick-cmds">';
@@ -256,7 +256,7 @@ export function rCmdHTML() {
 }
 
 // ── MCP / Skill Panel ──
-export function rMcpHTML() {
+export function rMcpHTML(): string {
   let h = '';
 
   // MCP Server Status
@@ -330,15 +330,15 @@ export function rMcpHTML() {
 }
 
 // ── DAG Panel (with Worker Roles) ──
-export function rDagHTML() {
+export function rDagHTML(): string {
   if (!S.orchRun || !S.orchRun.dag) {
     return '<div style="text-align:center;color:#8B7860;padding:20px">오케스트레이션 없음<br><small>/orchestrate 로 시작하세요</small></div>';
   }
-  const steps = Array.isArray(S.orchRun.dag) ? S.orchRun.dag : S.orchRun.dag.steps || [];
+  const steps = Array.isArray(S.orchRun.dag) ? S.orchRun.dag : (S.orchRun.dag as unknown as { steps: typeof S.orchRun.dag }).steps || [];
   if (!steps.length) return '<div style="text-align:center;color:#8B7860">스텝 없음</div>';
 
   // Worker summary cards
-  const wCounts = { SUPERVISOR: 0, BUILDER: 0, VERIFIER: 0, REVIEWER: 0 };
+  const wCounts: Record<string, number> = { SUPERVISOR: 0, BUILDER: 0, VERIFIER: 0, REVIEWER: 0 };
   steps.forEach(s => { if (s.worker && wCounts[s.worker] !== undefined) wCounts[s.worker]++; });
   const wsOrFallback = S.workerStats || wCounts;
   let html = '<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">';
@@ -354,15 +354,15 @@ export function rDagHTML() {
 
   // DAG SVG
   const nW = 110, nH = 30, gX = 20, gY = 45;
-  const inD = {}; steps.forEach(s => { inD[s.id] = 0; });
+  const inD: Record<string, number> = {}; steps.forEach(s => { inD[s.id] = 0; });
   steps.forEach(s => { (s.dependsOn || []).forEach(d => { if (inD[s.id] !== undefined) inD[s.id]++; }); });
-  const layers = [], placed = new Set();
+  const layers: typeof steps[] = [], placed = new Set<string>();
   while (placed.size < steps.length) {
     const layer = steps.filter(s => !placed.has(s.id) && (s.dependsOn || []).every(d => placed.has(d)));
     if (!layer.length) break; layers.push(layer); layer.forEach(s => placed.add(s.id));
   }
   const svgW = Math.max(300, layers.reduce((m, l) => Math.max(m, l.length), 0) * (nW + gX));
-  const svgH = layers.length * (nH + gY) + 20; const pos = {};
+  const svgH = layers.length * (nH + gY) + 20; const pos: Record<string, { x: number; y: number }> = {};
   let svg = '<div class="dag-wrap"><svg width="' + svgW + '" height="' + svgH + '" viewBox="0 0 ' + svgW + ' ' + svgH + '">';
   layers.forEach((layer, li) => {
     const tw = layer.length * (nW + gX) - gX, sx = (svgW - tw) / 2;
@@ -378,7 +378,7 @@ export function rDagHTML() {
     });
   });
   // Nodes with worker colors
-  const statusColors = { pending: '#555', completed: '#44AA44', failed: '#CC3300', skipped: '#888' };
+  const statusColors: Record<string, string> = { pending: '#555', completed: '#44AA44', failed: '#CC3300', skipped: '#888' };
   steps.forEach(s => {
     const p = pos[s.id]; if (!p) return;
     const wr = s.worker && WORKER_ROLES[s.worker];
@@ -396,13 +396,11 @@ export function rDagHTML() {
 }
 
 // ── Analytics Panel ──
-export function rAnalyticsHTML() {
+export function rAnalyticsHTML(): string {
   let h = '';
-  // Spark latency + ops + errors
   h += '<div class="analytics-section"><b>ops/min 추이</b>' + drawSparkSvg(S.sparkData.ops, '#44AA44', 280, 40) + '</div>';
   h += '<div class="analytics-section"><b>에러 추이</b>' + drawSparkSvg(S.sparkData.errs, '#CC3300', 280, 30) + '</div>';
   if (S.sparkData.lat.length > 1) h += '<div class="analytics-section"><b>레이턴시 추이</b>' + drawSparkSvg(S.sparkData.lat, '#6666CC', 280, 30) + '</div>';
-  // Tool Group distribution
   h += '<div class="analytics-section"><b>도구 그룹 분포</b>';
   const total2 = Object.values(S.groupStats).reduce((s, g) => s + g.total, 0) || 1;
   Object.entries(S.groupStats).forEach(([g, s]) => {
@@ -410,7 +408,6 @@ export function rAnalyticsHTML() {
     h += '<div class="sb"><span class="n">' + g + '</span><div class="b"><div class="f" style="width:' + p + '%;background:' + (GROUPS[g] || '#888') + '"></div></div><span class="v">' + s.total + '</span></div>';
   });
   h += '</div>';
-  // Heatmap
   h += '<div class="analytics-section"><b>활동 히트맵 (요일×시간)</b>' + renderHeatmapSvg() + '</div>';
   return h;
 }
@@ -418,9 +415,9 @@ export function rAnalyticsHTML() {
 // ══════════════════════════════════════════════════════
 // ── COMMAND HISTORY RENDER (in-panel live update) ──
 // ══════════════════════════════════════════════════════
-export function renderCmdHist() {
+export function renderCmdHist(): void {
   const countEl = document.getElementById('cmdCount');
-  if (countEl) countEl.textContent = S.cmdHistory.length;
+  if (countEl) countEl.textContent = String(S.cmdHistory.length);
   const el = document.getElementById('cmdHist');
   if (!el) return;
   el.innerHTML = S.cmdHistory.slice(0, 30).map(c => {
@@ -433,20 +430,19 @@ export function renderCmdHist() {
 // ══════════════════════════════════════════════════════
 // ── THROTTLED UI UPDATE (sUI / uUI) ──
 // ══════════════════════════════════════════════════════
-export function sUI() {
+export function sUI(): void {
   if (!S.uiD) {
     S.uiD = true;
     if (!S.uiT) S.uiT = setTimeout(() => { S.uiT = null; S.uiD = false; uUI(); }, 500);
   }
 }
 
-export function uUI() {
-  const d = S.entries,
+export function uUI(): void {
+  const d = S.entries as Record<string, unknown>[],
     al = d.reduce((a, e) => a + (e.decision === 'allow' ? 1 : 0), 0),
     dn = d.reduce((a, e) => a + (e.decision === 'deny' ? 1 : 0), 0);
-  // Top bar stats with delta
-  const sTEl = document.getElementById('sT'); if (sTEl) sTEl.textContent = d.length;
-  const sAel = document.getElementById('sA'); if (sAel) sAel.textContent = al;
+  const sTEl = document.getElementById('sT'); if (sTEl) sTEl.textContent = String(d.length);
+  const sAel = document.getElementById('sA'); if (sAel) sAel.textContent = String(al);
   const deltaEl = document.getElementById('sAd');
   if (deltaEl && d.length > S.prevTotal) {
     const diff = d.length - S.prevTotal;
@@ -454,11 +450,11 @@ export function uUI() {
     setTimeout(() => { deltaEl.textContent = ''; }, 2000);
   }
   S.prevTotal = d.length;
-  const sDEl = document.getElementById('sD'); if (sDEl) sDEl.textContent = dn;
+  const sDEl = document.getElementById('sD'); if (sDEl) sDEl.textContent = String(dn);
   if (S.serverMetrics) {
-    const sOEl = document.getElementById('sO'); if (sOEl) sOEl.textContent = S.serverMetrics.opsPerMin || '-';
+    const sOEl = document.getElementById('sO'); if (sOEl) sOEl.textContent = String(S.serverMetrics.opsPerMin || '-');
   }
-  const lcEl = document.getElementById('lc'); if (lcEl) lcEl.textContent = d.length;
+  const lcEl = document.getElementById('lc'); if (lcEl) lcEl.textContent = String(d.length);
   const mcEl = document.getElementById('mc');
   if (mcEl && S.serverMetrics) mcEl.textContent = `${S.serverMetrics.opsPerMin || 0}/m`;
   if (S.panelOpen) renderPanel();

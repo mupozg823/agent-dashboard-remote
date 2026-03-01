@@ -1,9 +1,35 @@
-// ── game-systems.js ── Operational tracking (replaces game mechanics)
+// ── game-systems.ts ── Operational tracking (replaces game mechanics)
 // Tool usage stats, pipeline status, MCP tracking
-import { S } from './state.js';
+import { S } from './state.ts';
+
+export interface AuditEntry {
+  tool?: string;
+  tool_name?: string;
+  err?: string;
+  decision?: 'allow' | 'deny' | string;
+  cmd?: string;
+  path?: string;
+  summary?: string;
+  ts?: string;
+  timestamp?: string;
+  skill_routed?: string;
+  level?: string;
+  ok?: boolean;
+  seq?: number;
+  group?: string;
+  [key: string]: unknown;
+}
+
+export interface ToolSummaryEntry {
+  calls: number;
+  errors: number;
+  lastCmd: string;
+  lastTime?: string;
+  successRate: string;
+}
 
 // ── Tool Call Tracking ──
-export function trackToolCall(entry) {
+export function trackToolCall(entry: AuditEntry): void {
   const tool = entry.tool || entry.tool_name || '';
   if (!tool) return;
   if (!S.toolStats[tool]) S.toolStats[tool] = { calls: 0, errors: 0, lastCmd: '' };
@@ -20,8 +46,8 @@ export function trackToolCall(entry) {
 }
 
 // ── Tool Summary ──
-export function getToolSummary() {
-  const result = {};
+export function getToolSummary(): Record<string, ToolSummaryEntry> {
+  const result: Record<string, ToolSummaryEntry> = {};
   for (const [tool, ts] of Object.entries(S.toolStats)) {
     result[tool] = { ...ts, successRate: ts.calls > 0 ? ((ts.calls - ts.errors) / ts.calls * 100).toFixed(0) : '100' };
   }
@@ -29,7 +55,7 @@ export function getToolSummary() {
 }
 
 // ── MCP / Skill Route Tracking ──
-export function trackMcp(entry) {
+export function trackMcp(entry: AuditEntry): void {
   const tool = entry.tool || entry.tool_name || '';
   if (tool.startsWith('mcp__')) {
     const parts = tool.split('__');
@@ -38,7 +64,7 @@ export function trackMcp(entry) {
       if (!S.mcpServerData[server]) S.mcpServerData[server] = { calls: 0, tools: {}, lastSeen: null };
       S.mcpServerData[server].calls++;
       S.mcpServerData[server].tools[toolName] = (S.mcpServerData[server].tools[toolName] || 0) + 1;
-      S.mcpServerData[server].lastSeen = entry.ts || entry.timestamp;
+      S.mcpServerData[server].lastSeen = entry.ts || entry.timestamp || null;
       S.mcpTotalCalls++;
     }
   }

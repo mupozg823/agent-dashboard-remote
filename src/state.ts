@@ -1,8 +1,348 @@
-// ── state.js ── Central shared mutable state + constants
+// ── state.ts ── Central shared mutable state + constants
 // All modules import S from here; no circular dependencies.
 
+// ── Interfaces ──
+
+export interface WorkerRole {
+  name: string;
+  color: string;
+  agentType: string;
+}
+
+export interface FloorColors {
+  wall: string[];
+  floor: string[];
+  accent: string;
+}
+
+export interface FloorDef {
+  id: number;
+  name: string;
+  nameKo: string;
+  colors: FloorColors;
+}
+
+export interface DeskDef {
+  x: number;
+  label: string;
+  act: boolean;
+  floor: number;
+}
+
+export interface CharDef {
+  h: string;
+  s: string;
+  p: string;
+  l: string;
+  r: string;
+  e: string;
+  emoji: string;
+}
+
+export interface PipelineStatus {
+  approves: number;
+  denies: number;
+  lastTool: string | null;
+  lastToolTime: number;
+}
+
+export interface ToolStat {
+  calls: number;
+  errors: number;
+  lastCmd: string;
+  lastTime?: string;
+}
+
+export interface SparkData {
+  ops: number[];
+  errs: number[];
+  lat: number[];
+}
+
+export interface GroupStat {
+  total: number;
+  errors: number;
+}
+
+export interface McpServerEntry {
+  calls: number;
+  tools: Record<string, number>;
+  lastSeen: string | null;
+}
+
+export interface ConnParams {
+  url: string;
+  key: string;
+  sessionId: string;
+}
+
+export interface CmdHistoryEntry {
+  id: string;
+  command: string;
+  status: string;
+  ts: Date;
+  reason?: string;
+  result?: unknown;
+  exitCode?: number;
+}
+
+export interface FloorHit {
+  fi: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface ElevatorPacket {
+  from: number;
+  to: number;
+  progress: number;
+  speed: number;
+  color: string;
+}
+
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  l: number;
+  c: string;
+  z: number;
+  shape: string;
+  rot: number;
+  rv: number;
+  sprite: PIXI.Sprite | null;
+}
+
+export interface WeatherParticle {
+  x: number;
+  y: number;
+  vx?: number;
+  vy?: number;
+  l: number;
+  type: string;
+  r: number;
+  sprite: PIXI.Graphics | null;
+}
+
+export interface FloatingText {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  size: number;
+  life: number;
+  vy: number;
+  alpha: number;
+  sprite: PIXI.Text | null;
+}
+
+export interface FloorTransition {
+  from: number;
+  to: number;
+  progress: number;
+  eased?: number;
+  dir: number;
+  fromBg: HTMLCanvasElement | null;
+  fromSprite: PIXI.Sprite | null;
+  startTime: number;
+  _divLine?: PIXI.Graphics | null;
+}
+
+export interface OrchRun {
+  state?: string;
+  runId?: string;
+  dag?: Array<{
+    id: string;
+    name?: string;
+    status?: string;
+    worker?: string;
+    dependsOn?: string[];
+    executor?: string;
+  }>;
+  total?: number;
+  done?: number;
+  steps?: { completed: number; total: number };
+}
+
+export interface WorkerInfo {
+  role: string;
+  status: string;
+  stepName?: string;
+}
+
+export interface ServerMetrics {
+  opsPerMin?: number;
+  successRate?: number;
+  blockRate?: number;
+  errorCount?: number;
+  total?: number;
+  sessions?: number;
+  durationMin?: number;
+  groups?: Record<string, { count: number } | number>;
+}
+
+export interface LaneStats {
+  pending: number;
+  running: number;
+  completed: number;
+  failed?: number;
+  locked?: boolean;
+  error?: string;
+}
+
+/** Agent instance (forward-declared to avoid circular dep with agents.ts) */
+export interface AgentInstance {
+  t: string;
+  i: number;
+  floor: number;
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  d: number;
+  st: string;
+  wf: number;
+  tk: string;
+  wt: number;
+  di: number;
+  tot: number;
+  go(tk: string): void;
+  up(): void;
+  draw(w: number, h: number): void;
+}
+
+export interface DashboardState {
+  // Supabase
+  sbClient: SupabaseClient | null;
+  channel: SupabaseChannel | null;
+  // Display
+  P: number;
+  // Data
+  entries: Record<string, unknown>[];
+  fr: number;
+  connected: boolean;
+  lastET: number;
+  serverMetrics: ServerMetrics | null;
+  prevTotal: number;
+  // PixiJS / Canvas
+  pixiApp: PIXI.Application | null;
+  pixiReady: boolean;
+  buf: HTMLCanvasElement | null;
+  cx: CanvasRenderingContext2D | null;
+  bg: HTMLCanvasElement | null;
+  bgW: number;
+  bgH: number;
+  dpr: number;
+  L: {
+    bg: PIXI.Container | null;
+    weather: PIXI.Container | null;
+    desks: PIXI.Container | null;
+    agents: PIXI.Container | null;
+    particles: PIXI.Container | null;
+    hud: PIXI.Container | null;
+    effects: PIXI.Container | null;
+  };
+  bgSprite: PIXI.Sprite | null;
+  agentSprites: PIXI.Sprite[];
+  deskSprites: PIXI.Sprite[];
+  hudCanvas: HTMLCanvasElement | null;
+  hudCx: CanvasRenderingContext2D | null;
+  hudSprite: (PIXI.Sprite & { _tex?: PIXI.Texture }) | null;
+  agentCanvases: HTMLCanvasElement[];
+  deskCanvases: HTMLCanvasElement[];
+  pixiPtexCache: Map<string, PIXI.Texture>;
+  // Session
+  sessionStart: number;
+  // Pipeline status
+  pipelineStatus: PipelineStatus;
+  // Tool stats
+  toolStats: Record<string, ToolStat>;
+  // Floors
+  currentFloor: number;
+  viewMode: 'floor' | 'building';
+  floorTransition: FloorTransition | null;
+  elevatorPackets: ElevatorPacket[];
+  buildingFloorHits: FloorHit[];
+  swipeStartY: number;
+  swipeStartTime: number;
+  swipeActive: boolean;
+  // Tick / Lane
+  lastTick: number;
+  relayUptime: number;
+  lastLaneStats: LaneStats | null;
+  lastLaneStatsTime: number;
+  // Particles
+  pts: Particle[];
+  floatingTexts: FloatingText[];
+  weatherParticles: WeatherParticle[];
+  // Shake
+  shakeFrames: number;
+  shakeIntensity: number;
+  // Render
+  lastRender: number;
+  hudPrev: number;
+  hudWait: number;
+  hudShow: number;
+  // Narration
+  nFull: string;
+  nIdx: number;
+  nTxt: string;
+  nTm: ReturnType<typeof setInterval> | null;
+  // Sparkline / Heatmap
+  sparkData: SparkData;
+  heatmap: Float32Array[];
+  groupStats: Record<string, GroupStat>;
+  // Activity
+  activityHistory: number[];
+  lastActivityPush: number;
+  lastToolStart: number;
+  // UI
+  uiD: boolean;
+  uiT: ReturnType<typeof setTimeout> | null;
+  panelOpen: boolean;
+  currentPanel: string;
+  newLogCount: number;
+  // Connection
+  reconnectAttempts: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  agentOnline: boolean;
+  connParams: ConnParams | null;
+  orchRun: OrchRun | null;
+  // Worker orchestration
+  workers: Record<string, WorkerInfo>;
+  workerStats: Record<string, number> | null;
+  activeWorkerAgents: Record<string, string> | null;
+  // SSE
+  sseActive: boolean;
+  sseSource: EventSource | null;
+  ssePort: number;
+  sseToken: string;
+  sseMetricsTimer: ReturnType<typeof setInterval> | null;
+  // Commands
+  cmdHistory: CmdHistoryEntry[];
+  // Building view
+  buildingCanvas: HTMLCanvasElement | null;
+  buildingCx2: CanvasRenderingContext2D | null;
+  // Sheet
+  sheetStartY: number;
+  // MCP tracking
+  mcpServerData: Record<string, McpServerEntry>;
+  skillRouteData: Record<string, number>;
+  mcpTotalCalls: number;
+  skillTotalRouted: number;
+  // Agents (set by agents.ts)
+  agents: AgentInstance[];
+  // Internal error count
+  _localErrors?: number;
+  // Day overlay
+  _dayOverlay?: PIXI.Graphics;
+}
+
 // ── Worker Roles (OpenClaw-style orchestration) ──
-export const WORKER_ROLES = {
+export const WORKER_ROLES: Record<string, WorkerRole> = {
   SUPERVISOR: { name: 'Supervisor', color: '#FFD700', agentType: 'agent' },
   BUILDER:    { name: 'Builder',    color: '#4488CC', agentType: 'writer' },
   VERIFIER:   { name: 'Verifier',   color: '#44AA44', agentType: 'finder' },
@@ -10,7 +350,7 @@ export const WORKER_ROLES = {
 };
 
 // ── Shared mutable state ──
-export const S = {
+export const S: DashboardState = {
   // Supabase
   sbClient: null, channel: null,
   // Display
@@ -72,6 +412,8 @@ export const S = {
   // MCP tracking
   mcpServerData: {}, skillRouteData: {},
   mcpTotalCalls: 0, skillTotalRouted: 0,
+  // Agents (populated by agents.ts)
+  agents: [],
 };
 
 // Init group stats
@@ -79,7 +421,7 @@ const _groups = ['shell', 'file-io', 'edit', 'search', 'external', 'agent', 'oth
 _groups.forEach(g => { S.groupStats[g] = { total: 0, errors: 0 }; });
 
 // ── Tool name translations ──
-export const TK = {
+export const TK: Record<string, string> = {
   Bash: '터미널', Read: '파일읽기', Write: '파일쓰기', Edit: '코드편집',
   Grep: '패턴검색', Glob: '파일찾기', WebSearch: '웹검색', WebFetch: '웹수집',
   Task: '서브에이전트', Skill: '스킬', NotebookEdit: '노트북',
@@ -89,7 +431,7 @@ export const TK = {
 };
 
 // ── Character definitions ──
-export const C = {
+export const C: Record<string, CharDef> = {
   bash:   { h: '#6644CC', s: '#4834D4', p: '#2A1B6A', l: 'Shell',  r: '명령실행', e: '$_', emoji: '🖥' },
   reader: { h: '#4488CC', s: '#0984E3', p: '#06527A', l: 'Reader', r: '파일분석', e: '{}', emoji: '📖' },
   writer: { h: '#FF6699', s: '#D63031', p: '#8B1A1A', l: 'Editor', r: '코드편집', e: '<>', emoji: '✏' },
@@ -101,7 +443,7 @@ export const C = {
 };
 
 // ── Floor definitions ──
-export const FLOORS = [
+export const FLOORS: FloorDef[] = [
   { id: 0, name: '1F Execution', nameKo: '1F 실행 계층',
     colors: { wall: ['#F0F8E8', '#E4F0D8', '#C0D8A0'], floor: ['#5A9E50', '#4D8A44', '#3D7A35'], accent: '#44DD66' } },
   { id: 1, name: '2F Analysis', nameKo: '2F 분석 계층',
@@ -110,10 +452,10 @@ export const FLOORS = [
     colors: { wall: ['#FFF0E0', '#F8E0C8', '#E0C0A0'], floor: ['#AA7744', '#996633', '#886622'], accent: '#FF8844' } },
 ];
 
-export const AGENT_FLOOR = { bash: 0, writer: 0, reader: 1, finder: 1, serena: 1, mcp: 2, agent: 2, web: 2 };
-export const AT = ['bash', 'reader', 'writer', 'finder', 'mcp', 'agent', 'web', 'serena'];
+export const AGENT_FLOOR: Record<string, number> = { bash: 0, writer: 0, reader: 1, finder: 1, serena: 1, mcp: 2, agent: 2, web: 2 };
+export const AT: string[] = ['bash', 'reader', 'writer', 'finder', 'mcp', 'agent', 'web', 'serena'];
 
-export const DESKS = [
+export const DESKS: DeskDef[] = [
   { x: .35, label: 'Shell', act: false, floor: 0 }, { x: .19, label: 'Reader', act: false, floor: 1 },
   { x: .65, label: 'Editor', act: false, floor: 0 }, { x: .43, label: 'Search', act: false, floor: 1 },
   { x: .22, label: 'MCP', act: false, floor: 2 },    { x: .50, label: 'Agent', act: false, floor: 2 },
@@ -121,7 +463,7 @@ export const DESKS = [
 ];
 
 // ── Tool particle colors ──
-export const TOOL_COLORS = {
+export const TOOL_COLORS: Record<string, string[]> = {
   Bash: ['#44DD66', '#22CC44', '#66FF88'],
   Read: ['#4488FF', '#6699FF', '#88BBFF'],
   Write: ['#FF6699', '#FF88AA', '#FF44CC'],
@@ -135,16 +477,16 @@ export const TOOL_COLORS = {
 };
 
 // ── Tool group classification ──
-export const GROUPS = {
+export const GROUPS: Record<string, string> = {
   shell: '#44AA44', 'file-io': '#4488CC', edit: '#CC8800',
   search: '#44AAAA', external: '#AA44CC', agent: '#CCAA22', other: '#888888',
 };
 
 // ── Default sky colors for background ──
-export const DEFAULT_SKY = ['#88DDFF', '#BBEEFF', '#E0F8FF'];
+export const DEFAULT_SKY: string[] = ['#88DDFF', '#BBEEFF', '#E0F8FF'];
 
 // ── Narration templates ──
-export const NR = {
+export const NR: Record<string, string[]> = {
   Bash: ['Shell: 터미널 명령 실행 중...', 'Shell: 시스템 호출 처리 중', 'Shell: 프로세스 실행 대기', 'Shell: 명령 결과 수집 중', 'Shell: 파이프라인 구성 중'],
   Read: ['Reader: 소스코드 분석 시작', 'Reader: 파일 내용 스캔 중', 'Reader: 구조 파악 중...', 'Reader: 의존성 추적 중', 'Reader: 모듈 분석 완료'],
   Write: ['Editor: 새 파일 생성 중', 'Editor: 코드 작성 시작', 'Editor: 보일러플레이트 생성', 'Editor: 파일 구조 설계 중'],
@@ -165,7 +507,14 @@ export const NR = {
 };
 
 // ── MCP server list ──
-export const MCP_SERVERS = [
+export interface McpServerDef {
+  id: string;
+  label: string;
+  desc: string;
+  icon: string;
+}
+
+export const MCP_SERVERS: McpServerDef[] = [
   { id: 'serena', label: 'Serena', desc: '코드 심볼 탐색/수정', icon: '🔍' },
   { id: 'grep-app', label: 'grep.app', desc: '공개 저장소 검색', icon: '🌐' },
   { id: 'context7', label: 'Context7', desc: '라이브러리 문서', icon: '📚' },
@@ -176,7 +525,13 @@ export const MCP_SERVERS = [
 ];
 
 // ── Skill categories ──
-export const SKILL_CATEGORIES = [
+export interface SkillCategory {
+  id: string;
+  label: string;
+  color: string;
+}
+
+export const SKILL_CATEGORIES: SkillCategory[] = [
   { id: 'session', label: '세션', color: '#6B9A8E' },
   { id: 'quality', label: '품질', color: '#D4523C' },
   { id: 'debug', label: '디버그', color: '#CC3300' },
@@ -193,4 +548,4 @@ export const SKILL_CATEGORIES = [
 ];
 
 // ── SSE Ports ──
-export const SSE_PORTS = [17891, 17892];
+export const SSE_PORTS: number[] = [17891, 17892];

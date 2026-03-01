@@ -1,24 +1,24 @@
-// ── renderer-views.js ── Game loop, HUD, building view, weather, floor system
-import { S, C, FLOORS, DESKS, AT, TOOL_COLORS } from './state.js';
-import { getSessionLabel, getDayPhase, getActivityStatus, getActivityIntensity } from './utils.js';
-import { cW, cH, buildBg, drawCh, drawActiveScreen, spawnP, drawPts, updateFloatingTexts, spawnFloatingText, triggerShake, getParticleTexture } from './renderer-core.js';
+// ── renderer-views.ts ── Game loop, HUD, building view, weather, floor system
+import { S, C, FLOORS, DESKS, AT, TOOL_COLORS } from './state.ts';
+import { getSessionLabel, getDayPhase, getActivityStatus, getActivityIntensity } from './utils.ts';
+import { cW, cH, buildBg, drawCh, drawActiveScreen, spawnP, drawPts, updateFloatingTexts, spawnFloatingText, triggerShake, getParticleTexture } from './renderer-core.ts';
 
 // Re-export from core for other modules
 export { cW, cH, buildBg, drawCh, drawActiveScreen, spawnP, drawPts, updateFloatingTexts, spawnFloatingText, triggerShake, getParticleTexture };
-export { initCanvas } from './renderer-core.js';
+export { initCanvas } from './renderer-core.ts';
 
 // ── (Game tick removed — operational mode) ──
 
 // ── Day phase overlay init ──
-export function initWeatherOverlay() {
+export function initWeatherOverlay(): void {
   if (!S.pixiReady) return;
   const overlay = new PIXI.Graphics();
-  S.L.weather.addChild(overlay);
+  S.L.weather!.addChild(overlay);
   S._dayOverlay = overlay;
 }
 
 // ── Day phase overlay (minimal — no seasonal weather) ──
-function drawDayOverlay(w, h) {
+function drawDayOverlay(w: number, h: number): void {
   const phase = getDayPhase();
   if (S.pixiReady && S._dayOverlay) {
     S._dayOverlay.clear();
@@ -26,7 +26,7 @@ function drawDayOverlay(w, h) {
     else if (phase === 'night') S._dayOverlay.rect(0, 0, w, h).fill({ color: 0x000022, alpha: 0.04 });
     else if (phase === 'morning') S._dayOverlay.rect(0, 0, w, h).fill({ color: 0xFFE8B0, alpha: 0.02 });
   } else {
-    const cx = S.cx;
+    const cx = S.cx!;
     if (phase === 'evening') { cx.fillStyle = '#FF880008'; cx.fillRect(0, 0, w, h); }
     else if (phase === 'night') { cx.fillStyle = '#0000220A'; cx.fillRect(0, 0, w, h); }
     else if (phase === 'morning') { cx.fillStyle = '#FFE8B005'; cx.fillRect(0, 0, w, h); }
@@ -43,10 +43,10 @@ function drawDayOverlay(w, h) {
     const alpha = Math.min(p.l / 20, 1);
     if (S.pixiReady && S.L.weather) {
       if (!p.sprite) { const g = new PIXI.Graphics(); S.L.weather.addChild(g); p.sprite = g; }
-      const g = p.sprite; g.clear();
+      const g = p.sprite as PIXI.Graphics; g.clear();
       if (p.type === 'sparkle') { p.r += .05; g.rect(p.x + Math.cos(p.r) * 2 - 1, p.y - 1, 2, 2).fill({ color: 0xFFE8B0, alpha: alpha * .4 }); g.rect(p.x - 1, p.y + Math.sin(p.r) * 2 - 1, 2, 2).fill({ color: 0xFFE8B0, alpha: alpha * .4 }); }
     } else {
-      const cx = S.cx;
+      const cx = S.cx!;
       if (p.type === 'sparkle') { p.r += .05; cx.globalAlpha = alpha * .4; cx.fillStyle = '#FFE8B0'; cx.fillRect(p.x + Math.cos(p.r) * 2 - 1, p.y - 1, 2, 2); cx.fillRect(p.x - 1, p.y + Math.sin(p.r) * 2 - 1, 2, 2); cx.globalAlpha = 1; }
     }
     return true;
@@ -54,9 +54,9 @@ function drawDayOverlay(w, h) {
 }
 
 // ── Operational HUD ──
-function drawHUD(w, h) {
+function drawHUD(w: number, h: number): void {
   const agents = S.agents;
-  let hx;
+  let hx: CanvasRenderingContext2D;
   if (S.pixiReady) {
     if (!S.hudCanvas || !S.hudCx) return;
     const hudLogW = Math.min(250, w), hudLogH = 110;
@@ -64,7 +64,7 @@ function drawHUD(w, h) {
     S.hudCx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
     S.hudCx.clearRect(0, 0, hudLogW, hudLogH);
     hx = S.hudCx;
-  } else { hx = S.cx; }
+  } else { hx = S.cx!; }
   let ac = 0; agents.forEach(a => { if (a.st === 'work') ac++; });
   if (ac !== S.hudPrev) { S.hudWait = 0; S.hudPrev = ac; } else if (S.hudWait < 31) S.hudWait++;
   if (S.hudWait >= 30) S.hudShow = S.hudPrev;
@@ -75,24 +75,20 @@ function drawHUD(w, h) {
   const hudH2 = 80 + (hasOrch ? 12 : 0);
   const xpX = 5;
 
-  // Background
   hx.fillStyle = '#000000AA'; hx.fillRect(4, 4, hudW2, hudH2);
   hx.fillStyle = '#1A1A3A'; hx.fillRect(5, 5, hudW2 - 2, hudH2 - 2);
   hx.fillStyle = '#8B6914'; hx.fillRect(5, 5, hudW2 - 2, 2); hx.fillRect(5, 3 + hudH2, hudW2 - 2, 2);
 
-  // Online indicator + time
   hx.fillStyle = S.agentOnline ? '#44CC44' : '#CC0000'; hx.fillRect(8, 8, 6, 6);
   hx.fillStyle = '#FFF'; hx.font = '8px monospace'; hx.textAlign = 'left'; hx.fillText(S.agentOnline ? 'ON' : 'OFF', 16, 13);
   const sess = getSessionLabel();
   hx.font = 'bold 9px monospace'; hx.textAlign = 'right'; hx.fillStyle = '#88BBDD'; hx.fillText(sess.label, hudW2 - 4, 14);
 
-  // Active agents + ops/min
   hx.textAlign = 'left'; hx.font = 'bold 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
   if (S.hudShow > 0) { hx.fillStyle = '#FF6644'; hx.fillRect(8, 18, 12, 12); hx.fillStyle = '#FFD080'; hx.fillText(S.hudShow + '\uBA85 \uC791\uC5C5 \uC911', 24, 29); }
   else { hx.fillStyle = '#88AACC'; hx.fillText('\uB300\uAE30 \uC911', 8, 29); }
   if (m && m.opsPerMin) { hx.fillStyle = '#6688AA'; hx.fillRect(134, 18, 1, 14); hx.fillStyle = '#88BBDD'; hx.font = 'bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'; hx.fillText(m.opsPerMin + ' ops/m', 140, 29); }
 
-  // Success rate bar
   const total = S.entries.length || 1;
   const errs = S._localErrors || 0;
   const successRate = Math.max(0, ((total - errs) / total * 100) | 0);
@@ -103,7 +99,6 @@ function drawHUD(w, h) {
   hx.fillStyle = srG; hx.fillRect(xpX, srY, srW * successRate / 100, srH);
   hx.fillStyle = '#CCC'; hx.font = 'bold 8px monospace'; hx.fillText(successRate + '% \uC131\uACF5', srW + 8, srY + 5);
 
-  // Activity intensity bar
   const intensity = getActivityIntensity();
   const aiY = srY + 8, aiW = srW, aiH = 3;
   hx.fillStyle = '#222'; hx.fillRect(xpX, aiY, aiW, aiH);
@@ -114,30 +109,26 @@ function drawHUD(w, h) {
   hx.fillStyle = aiG; hx.fillRect(xpX, aiY, aiW * intensity, aiH);
   hx.fillStyle = '#888'; hx.font = '8px monospace'; hx.fillText(S.activityHistory.length + 'ops', aiW + 8, aiY + 3);
 
-  // Mini sparkline
   const slY = aiY + 6, slH = 12, slW = aiW;
   hx.fillStyle = '#1A1A2A88'; hx.fillRect(xpX, slY, slW, slH);
   const now2 = Date.now(), bins = 15, binW2 = slW / bins;
-  const binCounts = new Array(bins).fill(0);
+  const binCounts = new Array<number>(bins).fill(0);
   for (const t of S.activityHistory) { const ago = (now2 - t) / 1000; if (ago < 30) { const bi = Math.min(Math.floor(ago / 2), bins - 1); binCounts[bins - 1 - bi]++; } }
   const maxBin = Math.max(...binCounts, 1);
   for (let i = 0; i < bins; i++) { const bh = (binCounts[i] / maxBin) * slH; hx.fillStyle = binCounts[i] > 3 ? '#FF884488' : binCounts[i] > 1 ? '#44AA4488' : '#FFFFFF22'; hx.fillRect(xpX + i * binW2, slY + slH - bh, binW2 - 1, bh); }
 
-  // Pipeline stats line
   let extraY = slY + slH + 3;
   const ps = S.pipelineStatus;
   hx.fillStyle = '#888'; hx.font = 'bold 8px monospace'; hx.textAlign = 'left';
   hx.fillText('ERR:' + errs + '  DENY:' + ps.denies + '  TOOLS:' + total, xpX, extraY + 5); extraY += 9;
 
-  // Current tool
   if (ps.lastTool) {
     const lastCmd = S.toolStats[ps.lastTool]?.lastCmd || '';
     hx.fillStyle = '#44DD66'; hx.font = 'bold 8px monospace';
     hx.fillText('\u25B6 ' + ps.lastTool + ': ' + lastCmd.slice(0, 28), xpX, extraY + 5); extraY += 9;
   }
 
-  // Orchestration progress
-  if (hasOrch) {
+  if (hasOrch && S.orchRun) {
     const oTotal = S.orchRun.total || 1, oDone = S.orchRun.done || 0, oW2 = srW, oH2 = 4;
     hx.fillStyle = '#222'; hx.fillRect(xpX, extraY, oW2, oH2);
     const oPct = Math.min(oDone / oTotal, 1);
@@ -148,17 +139,17 @@ function drawHUD(w, h) {
 
   if (S.pixiReady && S.hudSprite) {
     if (S.hudSprite._tex) S.hudSprite._tex.destroy(true);
-    S.hudSprite._tex = PIXI.Texture.from(S.hudCanvas); S.hudSprite.texture = S.hudSprite._tex; S.hudSprite.x = 0; S.hudSprite.y = 0;
+    S.hudSprite._tex = PIXI.Texture.from(S.hudCanvas!); S.hudSprite.texture = S.hudSprite._tex; S.hudSprite.x = 0; S.hudSprite.y = 0;
     S.hudSprite.scale.set(1 / S.dpr);
   }
 }
 
 // ── Building Cross-Section View ──
-function renderBuildingView(w, h) {
+function renderBuildingView(w: number, h: number): void {
   if (!S.pixiReady) return;
   if (!S.buildingCanvas) { S.buildingCanvas = document.createElement('canvas'); S.buildingCx2 = S.buildingCanvas.getContext('2d'); }
   S.buildingCanvas.width = w; S.buildingCanvas.height = h;
-  const bx = S.buildingCx2, fr = S.fr, agents = S.agents;
+  const bx = S.buildingCx2!, fr = S.fr, agents = S.agents;
   bx.clearRect(0, 0, w, h);
   const phase = getDayPhase(), isNight = phase === 'night', isEvening = phase === 'evening';
   const skyG = bx.createLinearGradient(0, 0, 0, h * .85);
@@ -211,14 +202,14 @@ function renderBuildingView(w, h) {
 }
 
 // ── Game Loop (PixiJS) ──
-function gameLoop() {
+function gameLoop(): void {
   const w = cW(), h = cH(); if (w < 10 || h < 10) return;
   if (!S.bg || S.bgW !== w || S.bgH !== h) {
     const bgBuf = document.createElement('canvas'); bgBuf.width = w; bgBuf.height = h;
     const prevBuf = S.buf, prevCx = S.cx; S.buf = bgBuf; S.cx = bgBuf.getContext('2d');
     buildBg(w, h); S.buf = prevBuf; S.cx = prevCx;
-    if (S.bgSprite._tex) S.bgSprite._tex.destroy(true); S.bgSprite._tex = PIXI.Texture.from(S.bg);
-    S.bgSprite.texture = S.bgSprite._tex; S.bgSprite.width = w; S.bgSprite.height = h;
+    if (S.bgSprite!._tex) S.bgSprite!._tex.destroy(true); S.bgSprite!._tex = PIXI.Texture.from(S.bg!);
+    S.bgSprite!.texture = S.bgSprite!._tex; S.bgSprite!.width = w; S.bgSprite!.height = h;
   }
   // Floor transition animation (PixiJS)
   if (S.floorTransition) {
@@ -230,17 +221,17 @@ function gameLoop() {
       ft.fromSprite.width = w; ft.fromSprite.height = h;
       S.L.bg.addChild(ft.fromSprite);
     }
-    if (ft.fromSprite) ft.fromSprite.y = ft.dir * ft.eased * h;
-    S.bgSprite.y = -ft.dir * (1 - ft.eased) * h;
+    if (ft.fromSprite) ft.fromSprite.y = ft.dir * ft.eased! * h;
+    S.bgSprite!.y = -ft.dir * (1 - ft.eased!) * h;
     if (S.L.effects) {
       if (!ft._divLine) { ft._divLine = new PIXI.Graphics(); S.L.effects.addChild(ft._divLine); }
-      const bndY = ft.dir > 0 ? ft.eased * h : (1 - ft.eased) * h;
-      ft._divLine.clear().rect(0, bndY - 1, w, 2).fill({ color: 0xFFD080, alpha: 0.4 * (1 - ft.eased) });
+      const bndY = ft.dir > 0 ? ft.eased! * h : (1 - ft.eased!) * h;
+      ft._divLine!.clear().rect(0, bndY - 1, w, 2).fill({ color: 0xFFD080, alpha: 0.4 * (1 - ft.eased!) });
     }
     if (ft.progress >= 1) finishFloorTransition();
   }
-  if (S.shakeFrames > 0) { S.pixiApp.stage.x = (Math.random() - .5) * S.shakeIntensity; S.pixiApp.stage.y = (Math.random() - .5) * S.shakeIntensity; S.shakeFrames--; }
-  else { S.pixiApp.stage.x = 0; S.pixiApp.stage.y = 0; }
+  if (S.shakeFrames > 0) { S.pixiApp!.stage.x = (Math.random() - .5) * S.shakeIntensity; S.pixiApp!.stage.y = (Math.random() - .5) * S.shakeIntensity; S.shakeFrames--; }
+  else { S.pixiApp!.stage.x = 0; S.pixiApp!.stage.y = 0; }
   drawDayOverlay(w, h);
   const agents = S.agents;
   if (S.viewMode === 'building') {
@@ -249,54 +240,55 @@ function gameLoop() {
     agents.forEach(a => { if (S.agentSprites[a.i]) S.agentSprites[a.i].visible = false; });
   } else {
     const fy = h * .55;
-    DESKS.forEach((d, i) => { const onFloor = d.floor === S.currentFloor; if (d.act && S.deskSprites[i] && onFloor) { const dc = S.deskCanvases[i], s = S.P, sx2 = 6.4 * s, sy2 = 5.8 * s; dc.width = Math.ceil(sx2 * S.dpr); dc.height = Math.ceil(sy2 * S.dpr); const prevBuf = S.buf, prevCx = S.cx; S.buf = dc; S.cx = dc.getContext('2d'); S.cx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); const dsx = d.x * w, sxOff = -dsx + 3.2 * s, syOff = -(fy + 2) + 7.5 * s; S.cx.save(); S.cx.translate(sxOff, syOff); drawActiveScreen(dsx, fy, AT[i]); S.cx.restore(); S.buf = prevBuf; S.cx = prevCx; if (S.deskSprites[i]._tex) S.deskSprites[i]._tex.destroy(true); S.deskSprites[i]._tex = PIXI.Texture.from(dc); S.deskSprites[i].texture = S.deskSprites[i]._tex; S.deskSprites[i].x = d.x * w - 3.2 * s; S.deskSprites[i].y = fy + 2 - 7.5 * s; S.deskSprites[i].visible = true; S.deskSprites[i].alpha = S.floorTransition ? S.floorTransition.eased : 1; S.deskSprites[i].scale.set(1 / S.dpr); } else if (S.deskSprites[i]) { S.deskSprites[i].visible = false; } });
+    DESKS.forEach((d, i) => { const onFloor = d.floor === S.currentFloor; if (d.act && S.deskSprites[i] && onFloor) { const dc = S.deskCanvases[i], s = S.P, sx2 = 6.4 * s, sy2 = 5.8 * s; dc.width = Math.ceil(sx2 * S.dpr); dc.height = Math.ceil(sy2 * S.dpr); const prevBuf = S.buf, prevCx = S.cx; S.buf = dc; S.cx = dc.getContext('2d'); S.cx!.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); const dsx = d.x * w, sxOff = -dsx + 3.2 * s, syOff = -(fy + 2) + 7.5 * s; S.cx!.save(); S.cx!.translate(sxOff, syOff); drawActiveScreen(dsx, fy, AT[i]); S.cx!.restore(); S.buf = prevBuf; S.cx = prevCx; if (S.deskSprites[i]._tex) S.deskSprites[i]._tex!.destroy(true); S.deskSprites[i]._tex = PIXI.Texture.from(dc); S.deskSprites[i].texture = S.deskSprites[i]._tex; S.deskSprites[i].x = d.x * w - 3.2 * s; S.deskSprites[i].y = fy + 2 - 7.5 * s; S.deskSprites[i].visible = true; S.deskSprites[i].alpha = S.floorTransition ? S.floorTransition.eased! : 1; S.deskSprites[i].scale.set(1 / S.dpr); } else if (S.deskSprites[i]) { S.deskSprites[i].visible = false; } });
     agents.forEach(a => a.up()); agents.sort((a, b) => a.y - b.y); updateFloorBadges();
-    agents.forEach((a) => { const onFloor = a.floor === S.currentFloor, ac = S.agentCanvases[a.i]; if (!ac) return; const sp = S.agentSprites[a.i]; if (!onFloor) { if (sp) sp.visible = false; return; } const aw = 110, ah = 120; ac.width = aw * S.dpr; ac.height = ah * S.dpr; const prevBuf = S.buf, prevCx = S.cx; S.buf = ac; S.cx = ac.getContext('2d'); S.cx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); S.cx.clearRect(0, 0, aw, ah); drawCh(aw / 2, ah * .65, a.t, a.wf, a.d, a.st === 'work', a.st === 'work' ? a.tk : '', a); S.buf = prevBuf; S.cx = prevCx; if (sp) { if (sp._tex) sp._tex.destroy(true); sp._tex = PIXI.Texture.from(ac); sp.texture = sp._tex; sp.x = a.x * w; sp.y = a.y * h; sp.zIndex = Math.floor(a.y * 1000); sp.visible = true; sp.alpha = S.floorTransition ? S.floorTransition.eased : 1; sp.scale.set(1 / S.dpr); } });
+    agents.forEach((a) => { const onFloor = a.floor === S.currentFloor, ac = S.agentCanvases[a.i]; if (!ac) return; const sp = S.agentSprites[a.i]; if (!onFloor) { if (sp) sp.visible = false; return; } const aw = 110, ah = 120; ac.width = aw * S.dpr; ac.height = ah * S.dpr; const prevBuf = S.buf, prevCx = S.cx; S.buf = ac; S.cx = ac.getContext('2d'); S.cx!.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); S.cx!.clearRect(0, 0, aw, ah); drawCh(aw / 2, ah * .65, a.t, a.wf, a.d, a.st === 'work', a.st === 'work' ? a.tk : '', a); S.buf = prevBuf; S.cx = prevCx; if (sp) { if (sp._tex) sp._tex.destroy(true); sp._tex = PIXI.Texture.from(ac); sp.texture = sp._tex; sp.anchor.set(0.5, 0.65); sp.x = a.x * w; sp.y = a.y * h; sp.zIndex = Math.floor(a.y * 1000); sp.visible = true; sp.alpha = S.floorTransition ? S.floorTransition.eased! : 1; sp.scale.set(1 / S.dpr); } });
   }
   drawPts(); updateFloatingTexts(); drawHUD(w, h); S.fr++;
 }
 
 // ── Canvas 2D fallback render ──
-function render(ts) {
+function render(ts: number): void {
   requestAnimationFrame(render);
   if (ts - S.lastRender < 33) return; S.lastRender = ts;
   const w = cW(), h = cH(); if (w < 10 || h < 10) return;
   if (!S.bg || S.bgW !== w || S.bgH !== h) buildBg(w, h);
   let sx = 0, sy = 0;
   if (S.shakeFrames > 0) { sx = (Math.random() - .5) * S.shakeIntensity; sy = (Math.random() - .5) * S.shakeIntensity; S.shakeFrames--; }
-  const cx = S.cx; cx.save(); cx.translate(sx, sy);
+  const cx = S.cx!; cx.save(); cx.translate(sx, sy);
   if (S.floorTransition) {
     const ft = S.floorTransition;
     ft.progress = Math.min((performance.now() - ft.startTime) / 400, 1);
     ft.eased = 1 - (1 - ft.progress) * (1 - ft.progress);
     if (ft.fromBg) cx.drawImage(ft.fromBg, 0, 0, ft.fromBg.width, ft.fromBg.height, 0, ft.dir * ft.eased * h, w, h);
-    cx.drawImage(S.bg, 0, 0, S.bg.width, S.bg.height, 0, -ft.dir * (1 - ft.eased) * h, w, h);
+    cx.drawImage(S.bg!, 0, 0, S.bg!.width, S.bg!.height, 0, -ft.dir * (1 - ft.eased) * h, w, h);
     const bndY = ft.dir > 0 ? ft.eased * h : (1 - ft.eased) * h;
     cx.globalAlpha = 0.4 * (1 - ft.eased); cx.fillStyle = '#FFD080'; cx.fillRect(0, bndY - 1, w, 2); cx.globalAlpha = 1;
     if (ft.progress >= 1) finishFloorTransition();
   } else {
-    cx.drawImage(S.bg, 0, 0, S.bg.width, S.bg.height, 0, 0, w, h);
+    cx.drawImage(S.bg!, 0, 0, S.bg!.width, S.bg!.height, 0, 0, w, h);
   }
   drawDayOverlay(w, h);
   const fy = h * .55;
-  if (S.floorTransition) cx.globalAlpha = S.floorTransition.eased;
+  if (S.floorTransition) cx.globalAlpha = S.floorTransition.eased!;
   DESKS.forEach((d, i) => { if (d.act && d.floor === S.currentFloor) drawActiveScreen(d.x * w, fy, AT[i]); });
   S.agents.forEach(a => a.up()); S.agents.sort((a, b) => a.y - b.y);
   S.agents.filter(a => a.floor === S.currentFloor).forEach(a => a.draw(w, h));
   if (S.floorTransition) cx.globalAlpha = 1;
   updateFloorBadges(); drawPts(); updateFloatingTexts(); drawHUD(w, h);
   cx.restore(); S.fr++;
-  if (window._mainCx) window._mainCx.drawImage(S.buf, 0, 0);
+  const mainCx = (window as unknown as Record<string, unknown>)._mainCx as CanvasRenderingContext2D | undefined;
+  if (mainCx) mainCx.drawImage(S.buf!, 0, 0);
 }
 
 // ── Start render loop ──
-export function startRenderLoop() {
-  if (S.pixiReady) { initWeatherOverlay(); S.pixiApp.ticker.add(() => gameLoop()); }
+export function startRenderLoop(): void {
+  if (S.pixiReady) { initWeatherOverlay(); S.pixiApp!.ticker.add(() => gameLoop()); }
   else { requestAnimationFrame(render); }
 }
 
 // ── Floor transition cleanup ──
-function finishFloorTransition() {
+function finishFloorTransition(): void {
   if (!S.floorTransition) return;
   if (S.floorTransition.fromSprite) {
     const tex = S.floorTransition.fromSprite.texture;
@@ -314,7 +306,7 @@ function finishFloorTransition() {
 }
 
 // ── Floor system ──
-export function switchFloor(fi) {
+export function switchFloor(fi: number): void {
   if (fi < 0 || fi > 2 || fi === S.currentFloor) return;
   if (S.floorTransition) finishFloorTransition();
   const dir = fi > S.currentFloor ? 1 : -1;
@@ -322,30 +314,30 @@ export function switchFloor(fi) {
   S.currentFloor = fi; S.viewMode = 'floor'; S.bg = null;
   updateFloorBadges();
   const flEl = document.querySelector('.floor-nav');
-  if (flEl) { flEl.querySelectorAll('.fb').forEach((b, i) => { b.classList.toggle('active', i === fi); }); }
+  if (flEl) { flEl.querySelectorAll('.fb').forEach((b, i) => { (b as HTMLElement).classList.toggle('active', i === fi); }); }
 }
 
-export function toggleBuildingView() {
+export function toggleBuildingView(): void {
   if (S.floorTransition) finishFloorTransition();
   S.viewMode = S.viewMode === 'building' ? 'floor' : 'building'; S.bg = null;
 }
 
 // Cached DOM refs + throttled (called from gameLoop but only updates every 15 frames)
-let _fbEls = null, _fbFrame = 0;
-export function updateFloorBadges() {
+let _fbEls: (HTMLElement | null)[] | null = null, _fbFrame = 0;
+export function updateFloorBadges(): void {
   if (++_fbFrame % 15 !== 0) return;
   if (!_fbEls) _fbEls = [0, 1, 2].map(i => document.getElementById('fb' + i));
   for (let fi = 0; fi < 3; fi++) {
     const badge = _fbEls[fi];
     if (badge) {
       const wc = S.agents.filter(a => a.floor === fi && a.st === 'work').length;
-      badge.textContent = wc > 0 ? wc : '';
+      badge.textContent = wc > 0 ? String(wc) : '';
       badge.style.display = wc > 0 ? '' : 'none';
     }
   }
 }
 
-export function spawnElevatorPacket(from, to, tool) {
+export function spawnElevatorPacket(from: number, to: number, tool: string): void {
   const tc = TOOL_COLORS[tool]; const color = tc ? tc[0] : '#FFD080';
   S.elevatorPackets.push({ from, to, progress: 0, speed: 0.03 + Math.random() * 0.02, color });
 }

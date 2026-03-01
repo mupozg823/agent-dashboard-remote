@@ -1,7 +1,7 @@
-// ── utils.js ── Pure utility functions
-import { S, TK } from './state.js';
+// ── utils.ts ── Pure utility functions
+import { S, TK } from './state.ts';
 
-export function tk(t) {
+export function tk(t: string): string {
   if (!t) return '대기';
   if (TK[t]) return TK[t];
   if (t.startsWith('mcp__serena__')) return 'Serena';
@@ -15,7 +15,7 @@ export function tk(t) {
 }
 
 // Tool → Agent index mapping
-export function t2a(t) {
+export function t2a(t: string): number {
   if (!t) return 5;
   if (t === 'Bash') return 0;
   if (t === 'Read') return 1;
@@ -38,12 +38,12 @@ export function t2a(t) {
   return 5;
 }
 
-export function desc(e) {
-  const t = e.tool || '', s = e.summary || e.cmd || '';
-  if (t === 'Bash') { const c = e.cmd || s; if (c.includes('git')) return 'Git'; if (c.includes('npm') || c.includes('node')) return 'Node'; if (c.includes('curl') || c.includes('wget')) return '네트워크'; if (c.includes('docker')) return 'Docker'; if (c.includes('test') || c.includes('jest')) return '테스트'; return '명령실행'; }
-  if (t === 'Read') { const f = (e.path || s).split(/[/\\]/).pop(); return f ? f.slice(0, 14) : '파일읽기'; }
-  if (t === 'Write') { const f = (e.path || s).split(/[/\\]/).pop(); return f ? '생성:' + f.slice(0, 10) : '파일생성'; }
-  if (t === 'Edit') { const f = (e.path || s).split(/[/\\]/).pop(); return f ? '수정:' + f.slice(0, 10) : '코드수정'; }
+export function desc(e: Record<string, unknown>): string {
+  const t = (e.tool as string) || '', s = (e.summary as string) || (e.cmd as string) || '';
+  if (t === 'Bash') { const c = (e.cmd as string) || s; if (c.includes('git')) return 'Git'; if (c.includes('npm') || c.includes('node')) return 'Node'; if (c.includes('curl') || c.includes('wget')) return '네트워크'; if (c.includes('docker')) return 'Docker'; if (c.includes('test') || c.includes('jest')) return '테스트'; return '명령실행'; }
+  if (t === 'Read') { const f = ((e.path as string) || s).split(/[/\\]/).pop(); return f ? f.slice(0, 14) : '파일읽기'; }
+  if (t === 'Write') { const f = ((e.path as string) || s).split(/[/\\]/).pop(); return f ? '생성:' + f.slice(0, 10) : '파일생성'; }
+  if (t === 'Edit') { const f = ((e.path as string) || s).split(/[/\\]/).pop(); return f ? '수정:' + f.slice(0, 10) : '코드수정'; }
   if (t === 'NotebookEdit') return '노트북편집';
   if (t === 'Grep') return '코드검색'; if (t === 'Glob') return '파일탐색';
   if (t === 'WebSearch') return '웹검색'; if (t === 'WebFetch') return '페이지수집';
@@ -51,7 +51,7 @@ export function desc(e) {
   if (t === 'ToolSearch') return '도구탐색'; if (t === 'AskUserQuestion') return '사용자질의';
   if (t === 'EnterPlanMode') return '계획수립'; if (t === 'ExitPlanMode') return '계획완료';
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(t)) return '태스크관리';
-  if (t.startsWith('mcp__serena')) return 'Serena:' + t.split('__').pop().slice(0, 10);
+  if (t.startsWith('mcp__serena')) return 'Serena:' + t.split('__').pop()!.slice(0, 10);
   if (t.startsWith('mcp__grep')) return '코드검색(외부)';
   if (t.startsWith('mcp__context7')) return '문서조회';
   if (t.startsWith('mcp__filesystem')) return '파일시스템';
@@ -62,10 +62,10 @@ export function desc(e) {
   return tk(t);
 }
 
-export function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
-export function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+export function esc(s: unknown): string { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+export function pick<T>(a: T[]): T { return a[Math.floor(Math.random() * a.length)]; }
 
-export function toolGroup(t) {
+export function toolGroup(t: string): string {
   if (!t) return 'other';
   if (t === 'Bash') return 'shell';
   if (['Read', 'Write', 'Glob'].includes(t)) return 'file-io';
@@ -77,8 +77,14 @@ export function toolGroup(t) {
 }
 
 // Real-time session label (recalculated at most once per second)
-let _calCache = null, _calBucket = -1;
-export function getSessionLabel() {
+export interface SessionLabel {
+  time: string;
+  elapsed: number;
+  label: string;
+}
+
+let _calCache: SessionLabel | null = null, _calBucket = -1;
+export function getSessionLabel(): SessionLabel {
   const now = Date.now();
   const bucket = Math.floor(now / 1000);
   if (bucket === _calBucket && _calCache) return _calCache;
@@ -95,7 +101,7 @@ export function getSessionLabel() {
   return _calCache;
 }
 
-export function getDayPhase() {
+export function getDayPhase(): 'morning' | 'day' | 'evening' | 'night' {
   const h = new Date().getHours();
   if (h >= 6 && h < 10) return 'morning';
   if (h >= 10 && h < 17) return 'day';
@@ -105,7 +111,7 @@ export function getDayPhase() {
 
 // Activity status (replaces weather)
 let _statusCache = 'idle', _statusTs = 0;
-export function getActivityStatus() {
+export function getActivityStatus(): string {
   const now = Date.now();
   if (now - _statusTs < 1000) return _statusCache;
   _statusTs = now;
@@ -116,21 +122,21 @@ export function getActivityStatus() {
   return _statusCache;
 }
 
-export function trackActivity() {
+export function trackActivity(): void {
   const now = Date.now();
   S.activityHistory.push(now);
   S.activityHistory = S.activityHistory.filter(t => now - t < 60000);
 }
 
-export function getActivityIntensity() {
+export function getActivityIntensity(): number {
   return Math.min(S.activityHistory.length / 30, 1);
 }
 
-export function addSpark(key, val) {
+export function addSpark(key: keyof typeof S.sparkData, val: number): void {
   const a = S.sparkData[key]; a.push(val); if (a.length > 30) a.shift();
 }
 
-export function recordHeat(ts) {
+export function recordHeat(ts: string | undefined): void {
   const d = new Date(ts || Date.now());
   S.heatmap[d.getDay()][d.getHours()]++;
 }
