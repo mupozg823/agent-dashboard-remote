@@ -210,28 +210,92 @@ export function rAgHTML(): string {
   const agents = S.agents;
   if (!agents || !agents.length) return '<div style="text-align:center;color:#8B7860;padding:20px">에이전트 초기화 대기 중...</div>';
   const toolSum = getToolSummary();
-  return agents.map(a => {
-    const c = C[a.t],
+
+  // Control bar
+  let h = '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:8px;background:#FFF8E8;border-radius:8px;border:1px solid #D4B896">';
+  h += `<span style="font-size:11px;font-weight:bold;color:var(--gold-dd)">${S.fallbackMode ? '고정' : '동적'} 모드</span>`;
+  h += `<span style="font-size:10px;color:#8B7860;margin-left:auto">${agents.length}/${S.maxAgents}</span>`;
+  h += `<button onclick="toggleFallback()" style="padding:3px 8px;border:1px solid var(--kairo-border);border-radius:6px;background:var(--cream);color:var(--text);font-size:10px;font-family:inherit;cursor:pointer">${S.fallbackMode ? '동적 전환' : '고정 전환'}</button>`;
+  h += `<button onclick="addManualAgent()" style="padding:3px 8px;border:1px solid var(--ok);border-radius:6px;background:#44AA4420;color:var(--ok);font-size:10px;font-weight:bold;font-family:inherit;cursor:pointer">+ 추가</button>`;
+  h += '</div>';
+
+  // Project context badge
+  if (S.projectContext) {
+    const pc = S.projectContext;
+    h += `<div style="padding:4px 8px;margin-bottom:6px;background:${pc.color || '#3178C6'}15;border-left:3px solid ${pc.color || '#3178C6'};border-radius:4px;font-size:11px;color:${pc.color || '#3178C6'};font-weight:bold">${pc.name}${pc.language ? ' — ' + pc.language : ''}</div>`;
+  }
+
+  h += agents.map(a => {
+    const c = C[a.t] || C.commander,
       txt = a.tk || (a.st === 'work' ? '처리 중' : a.st === 'walk' ? '이동' : '대기'),
       act = a.st === 'work' ? ' on' : '',
       st = a.st === 'work' ? 'RUN' : a.st === 'walk' ? 'MOV' : 'IDLE',
       stC = a.st === 'work' ? 'var(--warm-red)' : a.st === 'walk' ? 'var(--accent-gold)' : 'var(--muted-teal)';
-    // Gather tool stats for this agent's tools
+    // Gather tool stats for this agent's tools (architecture-synced MCP distribution)
     const agentTools = Object.entries(toolSum).filter(([t]) => {
-      const map: Record<string, string[]> = { bash: ['Bash'], reader: ['Read'], writer: ['Write', 'Edit', 'NotebookEdit'], finder: ['Grep', 'Glob'], mcp: [], agent: ['Task', 'Skill', 'TaskCreate', 'TaskUpdate'], web: ['WebSearch', 'WebFetch'], serena: [] };
-      const toolList = map[a.t] || [];
-      if (a.t === 'mcp') return t.startsWith('mcp__') && !t.startsWith('mcp__serena');
-      if (a.t === 'serena') return t.startsWith('mcp__serena');
-      return toolList.includes(t);
+      const map: Record<string, string[]> = {
+        commander: ['Agent', 'Task', 'Skill', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop', 'TaskOutput', 'EnterPlanMode', 'ExitPlanMode'],
+        operator: ['Bash'],
+        architect: ['Read', 'Write', 'Edit', 'NotebookEdit'],
+        inspector: ['Grep', 'Glob', 'ToolSearch'],
+        diplomat: ['WebSearch', 'WebFetch', 'AskUserQuestion'],
+        guardian: [],
+      };
+      if (t.startsWith('mcp__')) {
+        if (t.startsWith('mcp__serena') || t.startsWith('mcp__filesystem')) return a.t === 'architect';
+        if (t.startsWith('mcp__grep') || t.startsWith('mcp__seq')) return a.t === 'inspector';
+        if (t.startsWith('mcp__context7') || t.startsWith('mcp__claude_ai_Notion')) return a.t === 'diplomat';
+        if (t.startsWith('mcp__memory')) return a.t === 'guardian';
+        return a.t === 'guardian';
+      }
+      return (map[a.t] || []).includes(t);
     }) as [string, ToolSummaryEntry][];
     const totalCalls = agentTools.reduce((s, [, v]) => s + v.calls, 0);
     const totalErrs = agentTools.reduce((s, [, v]) => s + v.errors, 0);
     const lastCmd = agentTools.length > 0 ? agentTools.sort((a2, b) => ((b[1].lastTime || '') > (a2[1].lastTime || '') ? 1 : -1))[0][1].lastCmd : '';
-    return `<div class="ac${act}"><div class="fc" style="background:${a.st === 'work' ? c.s : 'var(--cream)'};color:${a.st === 'work' ? '#FFF' : c.s};font-family:monospace;font-weight:bold">${c.e}</div><div class="i"><div class="nm">${c.l} <span class="rl">${c.r} | ${a.tot}ops</span></div><div class="tk"><span style="color:${stC};font-weight:bold;font-size:9px">[${st}]</span> ${esc(txt.slice(0, 40))}</div>` +
+
+    // Session info for dynamic agents
+    const sessionId = (a as unknown as Record<string, unknown>).sessionId as string | undefined;
+    const session = sessionId ? S.sessionRegistry.get(sessionId) : null;
+    const sessionLine = session
+      ? `<div style="font-size:9px;color:#AAA;margin-top:2px">${sessionId!.slice(0, 8)} ${session.hostname || ''} ${session.project || ''}</div>`
+      : '';
+
+    // Top 3 tools for session
+    let topToolsLine = '';
+    if (session && Object.keys(session.toolProfile).length > 0) {
+      const top3 = Object.entries(session.toolProfile).sort((a2, b2) => b2[1] - a2[1]).slice(0, 3);
+      topToolsLine = `<div style="font-size:9px;color:#8B7860;margin-top:1px">${top3.map(([t, n]) => t + ':' + n).join(' ')}</div>`;
+    }
+
+    // Remove button (only in dynamic mode or for non-fallback agents)
+    const removeBtn = !S.fallbackMode
+      ? `<button onclick="removeManualAgent('${sessionId || a.i}')" style="position:absolute;top:4px;right:4px;border:none;background:transparent;color:var(--err);font-size:14px;cursor:pointer;padding:2px 4px;line-height:1" title="제거">&times;</button>`
+      : '';
+
+    // Architecture-specific metric line
+    let archLine = '';
+    if (a.t === 'commander' && S.lastLaneStats) {
+      const ls = S.lastLaneStats;
+      archLine = `<div style="font-size:9px;color:#C4963D;margin-top:1px">큐:${ls.pending||0} 실행:${ls.running||0} 완료:${ls.completed||0}${ls.locked?' 🔒':''}</div>`;
+    } else if (a.t === 'guardian') {
+      const ap = S.pipelineStatus.approves, dn = S.pipelineStatus.denies;
+      if (ap + dn > 0) archLine = `<div style="font-size:9px;margin-top:1px"><span style="color:var(--ok)">승인:${ap}</span> <span style="color:${dn>0?'var(--err)':'#888'}">차단:${dn}</span></div>`;
+    } else if (a.t === 'diplomat') {
+      const mode = S.sseActive ? 'SSE:' + (S.ssePort||'?') : S.connected ? 'Supabase' : '오프라인';
+      archLine = `<div style="font-size:9px;color:#D4694A;margin-top:1px">${mode}${S.relayUptime > 0 ? ' UP:' + Math.floor(S.relayUptime/60) + 'm' : ''}</div>`;
+    } else if (a.t === 'inspector') {
+      const errs = S._localErrors || 0;
+      archLine = `<div style="font-size:9px;color:#8B5E9B;margin-top:1px">감사:${S.entries.length} 에러:${errs}</div>`;
+    }
+
+    return `<div class="ac${act}" style="position:relative">${removeBtn}<div class="fc" style="background:${a.st === 'work' ? c.s : 'var(--cream)'};color:${a.st === 'work' ? '#FFF' : c.s};font-family:monospace;font-weight:bold">${c.e}</div><div class="i"><div class="nm">${c.l} <span class="rl">${c.r} | ${a.tot}ops</span></div><div class="tk"><span style="color:${stC};font-weight:bold;font-size:9px">[${st}]</span> ${esc(txt.slice(0, 40))}</div>` +
       `<div style="font-size:10px;margin-top:3px;color:#8B7860">호출: <b>${totalCalls}</b> | 에러: <b style="color:${totalErrs > 0 ? 'var(--err)' : 'inherit'}">${totalErrs}</b></div>` +
       (lastCmd ? `<div style="font-size:9px;color:#AAA;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(lastCmd.slice(0, 50))}</div>` : '') +
+      archLine + sessionLine + topToolsLine +
       `</div></div>`;
   }).join('');
+  return h;
 }
 
 // ── Command Panel ──

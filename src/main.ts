@@ -1,9 +1,10 @@
 // ── main.ts ── Bootstrap, DOM events, window exposures
-import { S, C, AT } from './state.ts';
+import { S, C, AT, AGENT_FLOOR } from './state.ts';
+import type { SessionInfo } from './state.ts';
 import { narr } from './ui.ts';
 import { openPanel, closePanel, switchTab } from './ui.ts';
 import { cW, cH, initCanvas, startRenderLoop, spawnP, switchFloor, toggleBuildingView } from './renderer-views.ts';
-import { agents } from './agents.ts';
+import { agents, spawnAgentForSession, despawnAgentForSession, initFallbackAgents, clearFallbackAgents, removeAgent } from './agents.ts';
 import { getParams, autoFetchSession, doConnect, connectWith, sendCmd, quickCmd, requestStatus, trySSEFallback } from './connection.ts';
 import { pick } from './utils.ts';
 import { NR } from './state.ts';
@@ -20,6 +21,9 @@ declare global {
     sendCmd: typeof sendCmd;
     quickCmd: typeof quickCmd;
     requestStatus: typeof requestStatus;
+    addManualAgent: (type?: string) => void;
+    removeManualAgent: (id: string) => void;
+    toggleFallback: () => void;
     _mainCx?: CanvasRenderingContext2D;
     supabase: typeof supabase;
     PIXI: typeof PIXI;
@@ -35,6 +39,60 @@ window.doConnect = doConnect;
 window.sendCmd = sendCmd;
 window.quickCmd = quickCmd;
 window.requestStatus = requestStatus;
+
+// ── Dynamic agent control ──
+window.addManualAgent = (type?: string) => {
+  const agentType = type || AT[Math.floor(Math.random() * AT.length)];
+  const sessionId = 'manual-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const session: SessionInfo = {
+    sessionId,
+    toolProfile: {},
+    dominantType: agentType,
+    lastActivity: Date.now(),
+    status: 'online',
+  };
+  S.sessionRegistry.set(sessionId, session);
+  if (S.fallbackMode) {
+    S.fallbackMode = false;
+    clearFallbackAgents();
+  }
+  spawnAgentForSession(session);
+  narr(`수동 에이전트 추가: ${agentType}`, agentType);
+  import('./ui.ts').then(ui => ui.sUI());
+};
+
+window.removeManualAgent = (id: string) => {
+  // id can be a sessionId or agent index
+  const agIdx = parseInt(id);
+  if (!isNaN(agIdx)) {
+    removeAgent(agIdx);
+  } else {
+    despawnAgentForSession(id);
+    S.sessionRegistry.delete(id);
+  }
+  // If no agents left, revert to fallback
+  if (S.agents.length === 0) {
+    S.fallbackMode = true;
+    initFallbackAgents();
+    S.sessionRegistry.clear();
+  }
+  import('./ui.ts').then(ui => ui.sUI());
+};
+
+window.toggleFallback = () => {
+  if (S.fallbackMode) {
+    S.fallbackMode = false;
+    clearFallbackAgents();
+    narr('동적 모드 전환', 'agent');
+  } else {
+    S.fallbackMode = true;
+    S.sessionRegistry.clear();
+    S.dynamicDesks.length = 0;
+    initFallbackAgents();
+    narr('고정 모드 복원', 'agent');
+  }
+  import('./ui.ts').then(ui => ui.sUI());
+};
 
 // ── Canvas touch/click support ──
 const sceneEl = document.querySelector('.scene') as HTMLElement | null;

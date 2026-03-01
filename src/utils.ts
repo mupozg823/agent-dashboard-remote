@@ -14,28 +14,64 @@ export function tk(t: string): string {
   return t;
 }
 
+// Tool → Agent type mapping (architecture-synced: MCP tools distributed by function)
+export function toolToAgentType(t: string): string {
+  if (!t) return 'commander';
+  // 1F Execution — Gateway control plane + Orchestrator
+  if (t === 'Bash') return 'operator';
+  if (t === 'Agent') return 'commander';
+  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop', 'TaskOutput'].includes(t)) return 'commander';
+  if (['Skill', 'EnterPlanMode', 'ExitPlanMode'].includes(t)) return 'commander';
+  // 2F Analysis — Code intelligence + Audit trail
+  if (t === 'Read') return 'architect';
+  if (['Write', 'Edit', 'NotebookEdit'].includes(t)) return 'architect';
+  if (t === 'Grep' || t === 'Glob') return 'inspector';
+  if (t === 'ToolSearch') return 'inspector';
+  // 3F Connection — Relay bridge + Security shield
+  if (t === 'WebSearch' || t === 'WebFetch') return 'diplomat';
+  if (t === 'AskUserQuestion') return 'diplomat';
+  // MCP tools → distributed by architectural function
+  if (t.startsWith('mcp__serena')) return 'architect';       // Serena = code intelligence
+  if (t.startsWith('mcp__filesystem')) return 'architect';    // file ops = code workspace
+  if (t.startsWith('mcp__grep')) return 'inspector';          // grep.app = pattern analysis
+  if (t.startsWith('mcp__seq')) return 'inspector';           // sequential-thinking = deep analysis
+  if (t.startsWith('mcp__context7')) return 'diplomat';       // docs = external knowledge
+  if (t.startsWith('mcp__claude_ai_Notion')) return 'diplomat'; // Notion = external API
+  if (t.startsWith('mcp__memory')) return 'guardian';          // memory = knowledge protection
+  if (t.startsWith('mcp__')) return 'guardian';                // other MCP = guardian fallback
+  return 'commander';
+}
+
 // Tool → Agent index mapping
 export function t2a(t: string): number {
-  if (!t) return 5;
-  if (t === 'Bash') return 0;
-  if (t === 'Read') return 1;
-  if (['Write', 'Edit', 'NotebookEdit'].includes(t)) return 2;
-  if (t === 'Grep' || t === 'Glob') return 3;
-  if (t === 'WebSearch' || t === 'WebFetch') return 6;
-  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(t)) return 5;
-  if (['Skill', 'EnterPlanMode', 'ExitPlanMode'].includes(t)) return 4; // mcp — 연결 계층
-  if (['Task', 'TaskStop', 'TaskOutput', 'AskUserQuestion'].includes(t)) return 6; // web — 연결 계층
-  if (t === 'ToolSearch') return 4; // mcp — 도구 검색은 연결 계층
-  if (t === 'Agent') return 5;
-  if (t.startsWith('mcp__serena')) return 7;
-  if (t.startsWith('mcp__grep')) return 3;
-  if (t.startsWith('mcp__context7')) return 4; // mcp — 외부 문서 연결
-  if (t.startsWith('mcp__filesystem')) return 1;
-  if (t.startsWith('mcp__memory')) return 4; // mcp — 지식 연결
-  if (t.startsWith('mcp__seq')) return 5;
-  if (t.startsWith('mcp__claude_ai_Notion')) return 6;
-  if (t.startsWith('mcp__')) return 4;
-  return 5;
+  if (S.fallbackMode) {
+    // Fixed mapping: 6 architecture roles (0-5), MCP distributed by function
+    if (!t) return 0;                                    // commander
+    if (t === 'Bash') return 1;                          // operator
+    if (t === 'Agent') return 0;                         // commander
+    if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop', 'TaskOutput'].includes(t)) return 0;
+    if (['Skill', 'EnterPlanMode', 'ExitPlanMode'].includes(t)) return 0;
+    if (t === 'Read') return 2;                          // architect
+    if (['Write', 'Edit', 'NotebookEdit'].includes(t)) return 2;
+    if (t === 'Grep' || t === 'Glob') return 3;          // inspector
+    if (t === 'ToolSearch') return 3;
+    if (t === 'WebSearch' || t === 'WebFetch') return 4;  // diplomat
+    if (t === 'AskUserQuestion') return 4;
+    // MCP distributed by architecture role
+    if (t.startsWith('mcp__serena')) return 2;            // architect (code intelligence)
+    if (t.startsWith('mcp__filesystem')) return 2;        // architect (file workspace)
+    if (t.startsWith('mcp__grep')) return 3;              // inspector (pattern analysis)
+    if (t.startsWith('mcp__seq')) return 3;               // inspector (deep analysis)
+    if (t.startsWith('mcp__context7')) return 4;          // diplomat (external docs)
+    if (t.startsWith('mcp__claude_ai_Notion')) return 4;  // diplomat (external API)
+    if (t.startsWith('mcp__memory')) return 5;            // guardian (knowledge protection)
+    if (t.startsWith('mcp__')) return 5;                  // guardian (MCP fallback)
+    return 0;
+  }
+  // Dynamic mode: find agent by type
+  const agentType = toolToAgentType(t);
+  const ag = S.agents.find(a => a.t === agentType);
+  return ag ? ag.i : (S.agents[0]?.i ?? 0);
 }
 
 export function desc(e: Record<string, unknown>): string {

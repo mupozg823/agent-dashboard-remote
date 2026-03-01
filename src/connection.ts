@@ -1,9 +1,11 @@
 // ── connection.ts ── Supabase Realtime + SSE fallback connection
 import { S, DESKS, AT, NR, TOOL_COLORS, SSE_PORTS, WORKER_ROLES } from './state.ts';
+import type { SessionInfo } from './state.ts';
 import { desc, pick, t2a, toolGroup, trackActivity, addSpark, recordHeat } from './utils.ts';
 import { toast, narr, updateBadge, renderCmdHist, sUI } from './ui.ts';
 import { cW, cH, initCanvas, startRenderLoop, spawnP, spawnFloatingText, triggerShake, switchFloor, spawnElevatorPacket } from './renderer-views.ts';
 import { trackToolCall, trackMcp, type AuditEntry } from './game-systems.ts';
+import { spawnAgentForSession, despawnAgentForSession, initFallbackAgents, clearFallbackAgents, sessionToAgentType, getDeskForAgent } from './agents.ts';
 
 // ── URL params ──
 export function getParams(): { url: string; key: string; session: string } {
@@ -100,7 +102,7 @@ export function connectWith(url: string, key: string, sessionId: string): void {
     const cmd = S.cmdHistory.find(c => c.id === payload.id);
     if (cmd) { cmd.status = 'executing'; renderCmdHist(); }
     toast('\uC2E4\uD589 \uC911: ' + ((payload.command as string) || '').slice(0, 30), 'in');
-    narr('\uBA85\uB839 \uC2E4\uD589 \uC2DC\uC791: ' + ((payload.command as string) || ''), 'bash');
+    narr('\uBA85\uB839 \uC2E4\uD589 \uC2DC\uC791: ' + ((payload.command as string) || ''), 'operator');
     spawnP(cW() / 2, cH() / 2, 6, 'success');
   });
 
@@ -121,9 +123,9 @@ export function connectWith(url: string, key: string, sessionId: string): void {
   S.channel.on('broadcast', { event: 'orch-dag' }, ({ payload }: { payload: Record<string, unknown> }) => {
     S.orchRun = S.orchRun || {}; S.orchRun.dag = payload.dag as typeof S.orchRun.dag; S.orchRun.total = payload.steps as number; S.orchRun.done = 0; S.workers = {}; S.activeWorkerAgents = {};
     if (Array.isArray(payload.dag)) { (payload.dag as Array<{ id: string; worker?: string; name?: string }>).forEach(st => { if (st.worker) { S.workers[st.id] = { role: st.worker, status: 'pending', stepName: st.name }; const wr = WORKER_ROLES[st.worker]; if (wr) S.activeWorkerAgents![wr.agentType] = st.worker; } }); }
-    toast('DAG \uC0DD\uC131: ' + payload.steps + '\uAC1C \uC2A4\uD15D', 'ok'); narr('\uD0DC\uC2A4\uD06C \uBD84\uD574 \uC644\uB8CC: ' + payload.steps + '\uAC1C \uC2A4\uD15D', 'agent'); for (let i = 0; i < Math.min(payload.steps as number, 12); i++) spawnP(cW() * Math.random(), cH() * Math.random(), 3, 'success'); updateOrchUI();
+    toast('DAG \uC0DD\uC131: ' + payload.steps + '\uAC1C \uC2A4\uD15D', 'ok'); narr('\uD0DC\uC2A4\uD06C \uBD84\uD574 \uC644\uB8CC: ' + payload.steps + '\uAC1C \uC2A4\uD15D', 'commander'); for (let i = 0; i < Math.min(payload.steps as number, 12); i++) spawnP(cW() * Math.random(), cH() * Math.random(), 3, 'success'); updateOrchUI();
   });
-  S.channel.on('broadcast', { event: 'orch-step-start' }, ({ payload }: { payload: Record<string, unknown> }) => { if (payload.worker && payload.step) { S.workers[payload.step as string] = { role: payload.worker as string, status: 'running', stepName: payload.name as string }; const wr = WORKER_ROLES[payload.worker as string]; if (wr) S.activeWorkerAgents![wr.agentType] = payload.worker as string; } toast('\uC2E4\uD589: ' + payload.name, 'in'); narr(payload.step + ': ' + payload.name + ' (' + payload.executor + ')', 'bash'); updateOrchUI(); });
+  S.channel.on('broadcast', { event: 'orch-step-start' }, ({ payload }: { payload: Record<string, unknown> }) => { if (payload.worker && payload.step) { S.workers[payload.step as string] = { role: payload.worker as string, status: 'running', stepName: payload.name as string }; const wr = WORKER_ROLES[payload.worker as string]; if (wr) S.activeWorkerAgents![wr.agentType] = payload.worker as string; } toast('\uC2E4\uD589: ' + payload.name, 'in'); narr(payload.step + ': ' + payload.name + ' (' + payload.executor + ')', 'operator'); updateOrchUI(); });
   S.channel.on('broadcast', { event: 'orch-step-done' }, ({ payload }: { payload: Record<string, unknown> }) => { if (payload.step && S.workers[payload.step as string]) { S.workers[payload.step as string].status = payload.success ? 'completed' : 'failed'; } if (payload.success) { spawnP(cW() / 2, cH() * .4, 6, 'success'); } else { triggerShake(3); } updateOrchUI(); });
   S.channel.on('broadcast', { event: 'orch-progress' }, ({ payload }: { payload: Record<string, unknown> }) => { if (S.orchRun) S.orchRun.done = payload.done as number; if (payload.workerStats) S.workerStats = payload.workerStats as Record<string, number>; updateOrchUI(); });
   S.channel.on('broadcast', { event: 'orch-complete' }, ({ payload }: { payload: Record<string, unknown> }) => {
@@ -131,7 +133,7 @@ export function connectWith(url: string, key: string, sessionId: string): void {
     if (Array.isArray(payload.dag)) { (payload.dag as Array<{ id: string; worker?: string; name?: string; status?: string }>).forEach(st => { if (st.worker && st.id) S.workers[st.id] = { role: st.worker, status: st.status || 'completed', stepName: st.name }; }); }
     toast(ok ? '\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uC158 \uC644\uB8CC!' : '\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uC158 \uC2E4\uD328', ok ? 'ok' : 'er');
     const steps = (payload.steps as { completed: number; total: number } | undefined);
-    narr('\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uC158 ' + payload.status + ': ' + (steps?.completed) + '/' + (steps?.total), 'agent');
+    narr('\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uC158 ' + payload.status + ': ' + (steps?.completed) + '/' + (steps?.total), 'commander');
     if (ok) { for (let i = 0; i < 15; i++) spawnP(cW() * Math.random(), cH() * Math.random(), 4, 'success'); } else triggerShake(6); S.activeWorkerAgents = null; updateOrchUI();
   });
 
@@ -146,10 +148,30 @@ export function connectWith(url: string, key: string, sessionId: string): void {
     el.innerHTML = h;
   }
 
-  // Presence
-  S.channel.on('presence', { event: 'sync' }, () => { const state = S.channel!.presenceState(); const al = Object.values(state).flat().filter(p => p.role === 'agent'); setAgentOnline(al.length > 0); });
-  S.channel.on('presence', { event: 'join' }, ({ newPresences }: Record<string, unknown>) => { const np = newPresences as Array<{ role: string }>; if (np && np.find(p => p.role === 'agent')) { setAgentOnline(true); narr('\uC5D0\uC774\uC804\uD2B8 \uC628\uB77C\uC778! \uC2E4\uC2DC\uAC04 \uBAA8\uB2C8\uD130\uB9C1 \uC2DC\uC791.', 'agent'); toast('\uC5D0\uC774\uC804\uD2B8 \uC811\uC18D', 'ok'); } });
-  S.channel.on('presence', { event: 'leave' }, () => { const state = S.channel!.presenceState(); const al = Object.values(state).flat().filter(p => p.role === 'agent'); setAgentOnline(al.length > 0); if (!al.length) toast('\uC5D0\uC774\uC804\uD2B8 \uC624\uD504\uB77C\uC778', 'er'); });
+  // Presence (also feeds dynamic agent sync)
+  S.channel.on('presence', { event: 'sync' }, () => {
+    const state = S.channel!.presenceState();
+    const al = Object.values(state).flat().filter(p => p.role === 'agent');
+    setAgentOnline(al.length > 0);
+    syncSessionAgents(state as Record<string, unknown[]>);
+  });
+  S.channel.on('presence', { event: 'join' }, ({ newPresences }: Record<string, unknown>) => {
+    const np = newPresences as Array<{ role: string }>;
+    if (np && np.find(p => p.role === 'agent')) {
+      setAgentOnline(true);
+      narr('\uC5D0\uC774\uC804\uD2B8 \uC628\uB77C\uC778! \uC2E4\uC2DC\uAC04 \uBAA8\uB2C8\uD130\uB9C1 \uC2DC\uC791.', 'commander');
+      toast('\uC5D0\uC774\uC804\uD2B8 \uC811\uC18D', 'ok');
+    }
+    const state = S.channel!.presenceState();
+    syncSessionAgents(state as Record<string, unknown[]>);
+  });
+  S.channel.on('presence', { event: 'leave' }, () => {
+    const state = S.channel!.presenceState();
+    const al = Object.values(state).flat().filter(p => p.role === 'agent');
+    setAgentOnline(al.length > 0);
+    if (!al.length) toast('\uC5D0\uC774\uC804\uD2B8 \uC624\uD504\uB77C\uC778', 'er');
+    syncSessionAgents(state as Record<string, unknown[]>);
+  });
 
   // Subscribe
   S.channel.subscribe(async (status: string) => {
@@ -241,7 +263,7 @@ function closeSSEIfActive(): void {
 
 export function setAgentOnline(online: boolean): void {
   S.agentOnline = online;
-  if (online) narr('\uC5D0\uC774\uC804\uD2B8 \uD65C\uC131 \uC911', 'agent');
+  if (online) narr('\uC5D0\uC774\uC804\uD2B8 \uD65C\uC131 \uC911', 'commander');
   else narr('\uC5D0\uC774\uC804\uD2B8 \uB300\uAE30 \uC911...');
 }
 
@@ -267,6 +289,15 @@ export function onE(e: AuditEntry): void {
   }
   if (e.err || e.decision === 'deny') S._localErrors = (S._localErrors || 0) + 1;
   trackActivity(); trackToolCall(e); trackMcp(e); recordHeat(e.ts);
+  // Dynamic agent: update tool profile for the active session
+  const activeSid = S.connParams?.sessionId || (e as Record<string, unknown>).session_id as string | undefined;
+  updateToolProfile(activeSid, e.tool || '');
+  // Project detection
+  const detectedProject = detectProject(e);
+  if (detectedProject && (!S.projectContext || S.projectContext.name !== detectedProject)) {
+    S.projectContext = { name: detectedProject, language: guessLanguage(e.path || '') };
+    applyProjectTheme(S.projectContext);
+  }
   const grp = toolGroup(e.tool || '');
   if (!S.groupStats[grp]) S.groupStats[grp] = { total: 0, errors: 0 };
   S.groupStats[grp].total++;
@@ -277,15 +308,169 @@ export function onE(e: AuditEntry): void {
   const detail = (e.cmd as string) || ((e.path as string)?.split(/[/\\]/).slice(-2).join('/')) || (e.summary as string) || '';
   const ds = detail || desc(e as Record<string, unknown>);
   if (ag && S.viewMode === 'floor' && ag.floor !== S.currentFloor) { spawnElevatorPacket(S.currentFloor, ag.floor, e.tool || ''); switchFloor(ag.floor); }
-  const deskX = DESKS[ag ? ag.i : 0].x * cW(), deskY = cH() * .55;
+  const desk = getDeskForAgent(ag ? ag.i : 0);
+  const deskX = desk.x * cW(), deskY = cH() * .55;
   if (ag && ag.st !== 'work') { ag.go(ds); spawnP(deskX, deskY, 4, 'success', e.tool); }
   else if (ag && ag.st === 'work') { ag.tk = ds; ag.wt = Math.max(ag.wt, 40); }
-  if (e.decision === 'deny') { narr(pick(NR.deny), 'agent'); spawnP(cW() / 2, cH() * .3, 8, 'error'); triggerShake(4); toast('\uCC28\uB2E8: ' + ((e.cmd as string) || e.tool || '').slice(0, 30), 'er'); }
-  else if (e.err) { spawnP(deskX, cH() * .5, 5, 'error'); const p = NR[e.tool || ''] || NR.idle; narr(pick(p), AT[ai]); }
-  else {
+  if (e.decision === 'deny') {
+    // ── Guardian activates on deny (smart-approve security event) ──
+    narr(pick(NR.deny), 'guardian');
+    const guardianAg = S.agents.find(a => a.t === 'guardian');
+    const guardianDesk = getDeskForAgent(guardianAg ? guardianAg.i : 5);
+    const gx = guardianDesk.x * cW(), gy = cH() * .55;
+    if (guardianAg && guardianAg.st !== 'work') { guardianAg.go('DENY: ' + ((e.cmd as string) || e.tool || '').slice(0, 20)); }
+    spawnP(gx, gy, 8, 'error'); triggerShake(4);
+    toast('\uCC28\uB2E8: ' + ((e.cmd as string) || e.tool || '').slice(0, 30), 'er');
+    // Also update pipeline status
+    S.pipelineStatus.denies++;
+  } else if (e.err) {
+    // ── Inspector reacts to errors (audit-log observation) ──
+    spawnP(deskX, cH() * .5, 5, 'error');
+    const inspectorAg = S.agents.find(a => a.t === 'inspector');
+    if (inspectorAg && inspectorAg.st !== 'work') { inspectorAg.go('ERR: ' + (e.err as string || '').slice(0, 20)); }
+    const p = NR[e.tool || ''] || NR.idle; narr(pick(p), AT[ai]);
+  } else {
     const p = NR[e.tool || ''] || NR.idle; narr(pick(p), AT[ai]);
     spawnP(deskX, cH() * .5, 3, 'success', e.tool);
+    S.pipelineStatus.approves++;
     if (Math.random() < .3) S.pts.push({ x: deskX, y: cH() * .5, vx: (cW() / 2 - deskX) * .02, vy: -(cH() * .5 - 20) * .02, l: 50, c: TOOL_COLORS[e.tool || ''] ? TOOL_COLORS[e.tool!][0] : '#FFD080', z: 2, shape: 'circle', rot: 0, rv: 0, sprite: null });
+  }
+}
+
+// ── Session Sync (dynamic agents) ──
+export function syncSessionAgents(presenceState: Record<string, unknown[]>): void {
+  const liveSessions = new Set<string>();
+
+  // Collect all agent-role presences
+  for (const [, presences] of Object.entries(presenceState)) {
+    for (const p of presences as Array<Record<string, unknown>>) {
+      if (p.role === 'agent' && p.session_id) {
+        const sid = p.session_id as string;
+        liveSessions.add(sid);
+
+        if (!S.sessionRegistry.has(sid)) {
+          // New session discovered
+          const session: SessionInfo = {
+            sessionId: sid,
+            hostname: (p.hostname as string) || undefined,
+            project: (p.project as string) || undefined,
+            toolProfile: {},
+            dominantType: 'commander',
+            lastActivity: Date.now(),
+            status: 'online',
+          };
+          S.sessionRegistry.set(sid, session);
+
+          // Switch out of fallback mode on first real session
+          if (S.fallbackMode) {
+            S.fallbackMode = false;
+            clearFallbackAgents();
+            toast('동적 모드 전환', 'ok');
+          }
+          const ag = spawnAgentForSession(session);
+          if (ag) {
+            toast(`세션 접속: ${sid.slice(0, 8)}`, 'ok');
+            narr(`새 에이전트 스폰! (${sid.slice(0, 8)})`, 'agent');
+          }
+        } else {
+          // Update existing session
+          const session = S.sessionRegistry.get(sid)!;
+          session.status = 'online';
+          session.lastActivity = Date.now();
+        }
+      }
+    }
+  }
+
+  // Despawn sessions that left
+  for (const [sid, session] of S.sessionRegistry) {
+    if (!liveSessions.has(sid) && session.status !== 'offline') {
+      session.status = 'offline';
+      despawnAgentForSession(sid);
+      toast(`세션 해제: ${sid.slice(0, 8)}`, 'er');
+    }
+  }
+
+  // If no live sessions, revert to fallback
+  if (liveSessions.size === 0 && !S.fallbackMode) {
+    S.fallbackMode = true;
+    initFallbackAgents();
+    S.sessionRegistry.clear();
+    toast('고정 모드 복원', 'in');
+  }
+}
+
+/** Sync from a single SSE/dashboard-server session */
+export function syncSingleSession(sessionId: string): void {
+  if (!sessionId || S.sessionRegistry.has(sessionId)) return;
+  const session: SessionInfo = {
+    sessionId,
+    toolProfile: {},
+    dominantType: 'commander',
+    lastActivity: Date.now(),
+    status: 'online',
+  };
+  S.sessionRegistry.set(sessionId, session);
+  if (S.fallbackMode) {
+    S.fallbackMode = false;
+    clearFallbackAgents();
+  }
+  spawnAgentForSession(session);
+}
+
+/** Detect project name from audit entry paths */
+export function detectProject(entry: AuditEntry): string | null {
+  const p = (entry.path as string) || '';
+  if (!p) return null;
+  const parts = p.replace(/\\/g, '/').split('/');
+  const markers = ['src', 'lib', 'node_modules', 'dist', '.git', 'packages', 'apps'];
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (markers.includes(parts[i]) && i > 0) return parts[i - 1] || null;
+  }
+  return parts.filter(Boolean).slice(-2, -1)[0] || null;
+}
+
+/** Update tool profile for a session after audit event */
+function updateToolProfile(sessionId: string | undefined, tool: string): void {
+  if (!sessionId || !tool) return;
+  const session = S.sessionRegistry.get(sessionId);
+  if (!session) return;
+  session.toolProfile[tool] = (session.toolProfile[tool] || 0) + 1;
+  session.lastActivity = Date.now();
+  // Recalc dominant type every 10 calls
+  const totalCalls = Object.values(session.toolProfile).reduce((a, b) => a + b, 0);
+  if (totalCalls % 10 === 0) {
+    session.dominantType = sessionToAgentType(session);
+  }
+}
+
+// ── Language/Project Theme helpers ──
+function guessLanguage(path: string): string | undefined {
+  if (!path) return undefined;
+  if (/\.tsx?$/.test(path)) return 'typescript';
+  if (/\.jsx?$/.test(path)) return 'javascript';
+  if (/\.py$/.test(path)) return 'python';
+  if (/\.rs$/.test(path)) return 'rust';
+  if (/\.go$/.test(path)) return 'go';
+  if (/\.java$/.test(path)) return 'java';
+  return undefined;
+}
+
+const LANG_THEMES: Record<string, { accent: string; bg: string }> = {
+  typescript: { accent: '#3178C6', bg: '#1B2838' },
+  javascript: { accent: '#F7DF1E', bg: '#2A2A2A' },
+  python:     { accent: '#FFD43B', bg: '#2B2B2B' },
+  rust:       { accent: '#DEA584', bg: '#1E1E1E' },
+  go:         { accent: '#00ADD8', bg: '#1E2A33' },
+  java:       { accent: '#F89820', bg: '#2A2A2A' },
+};
+
+function applyProjectTheme(ctx: { name: string; language?: string; color?: string }): void {
+  const theme = ctx.language ? LANG_THEMES[ctx.language] : null;
+  if (theme) {
+    ctx.color = theme.accent;
+    document.documentElement.style.setProperty('--project-accent', theme.accent);
+    document.documentElement.style.setProperty('--project-bg', theme.bg);
   }
 }
 

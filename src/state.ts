@@ -76,6 +76,28 @@ export interface ConnParams {
   sessionId: string;
 }
 
+export interface SessionInfo {
+  sessionId: string;
+  hostname?: string;
+  project?: string;
+  toolProfile: Record<string, number>;
+  dominantType: string;
+  lastActivity: number;
+  status: 'online' | 'idle' | 'offline';
+}
+
+export interface AgentLifecycle {
+  phase: 'spawning' | 'alive' | 'despawning';
+  progress: number;
+  startTime: number;
+}
+
+export interface ProjectContext {
+  name: string;
+  language?: string;
+  color?: string;
+}
+
 export interface CmdHistoryEntry {
   id: string;
   command: string;
@@ -335,6 +357,13 @@ export interface DashboardState {
   skillTotalRouted: number;
   // Agents (set by agents.ts)
   agents: AgentInstance[];
+  // Dynamic agent system
+  sessionRegistry: Map<string, SessionInfo>;
+  agentLifecycles: Map<number, AgentLifecycle>;
+  projectContext: ProjectContext | null;
+  maxAgents: number;
+  fallbackMode: boolean;
+  dynamicDesks: DeskDef[];
   // Internal error count
   _localErrors?: number;
   // Day overlay
@@ -343,10 +372,10 @@ export interface DashboardState {
 
 // ── Worker Roles (OpenClaw-style orchestration) ──
 export const WORKER_ROLES: Record<string, WorkerRole> = {
-  SUPERVISOR: { name: 'Supervisor', color: '#FFD700', agentType: 'agent' },
-  BUILDER:    { name: 'Builder',    color: '#4488CC', agentType: 'writer' },
-  VERIFIER:   { name: 'Verifier',   color: '#44AA44', agentType: 'finder' },
-  REVIEWER:   { name: 'Reviewer',   color: '#CC6644', agentType: 'reader' },
+  SUPERVISOR: { name: 'Supervisor', color: '#FFD700', agentType: 'commander' },
+  BUILDER:    { name: 'Builder',    color: '#4488CC', agentType: 'architect' },
+  VERIFIER:   { name: 'Verifier',   color: '#44AA44', agentType: 'inspector' },
+  REVIEWER:   { name: 'Reviewer',   color: '#CC6644', agentType: 'inspector' },
 };
 
 // ── Shared mutable state ──
@@ -414,6 +443,13 @@ export const S: DashboardState = {
   mcpTotalCalls: 0, skillTotalRouted: 0,
   // Agents (populated by agents.ts)
   agents: [],
+  // Dynamic agent system
+  sessionRegistry: new Map(),
+  agentLifecycles: new Map(),
+  projectContext: null,
+  maxAgents: 20,
+  fallbackMode: true,
+  dynamicDesks: [],
 };
 
 // Init group stats
@@ -430,36 +466,43 @@ export const TK: Record<string, string> = {
   ToolSearch: '도구탐색', AskUserQuestion: '질의',
 };
 
-// ── Character definitions ──
+// ── Character definitions (architecture-synced 6 roles) ──
 export const C: Record<string, CharDef> = {
-  bash:   { h: '#6644CC', s: '#4834D4', p: '#2A1B6A', l: 'Shell',  r: '명령실행', e: '$_', emoji: '🖥' },
-  reader: { h: '#4488CC', s: '#0984E3', p: '#06527A', l: 'Reader', r: '파일분석', e: '{}', emoji: '📖' },
-  writer: { h: '#FF6699', s: '#D63031', p: '#8B1A1A', l: 'Editor', r: '코드편집', e: '<>', emoji: '✏' },
-  finder: { h: '#44AA88', s: '#00796B', p: '#004040', l: 'Search', r: '패턴검색', e: '??', emoji: '🔍' },
-  mcp:    { h: '#44DDAA', s: '#00B894', p: '#006644', l: 'MCP',    r: '서버연동', e: '::', emoji: '🔌' },
-  agent:  { h: '#AA88FF', s: '#6C5CE7', p: '#3D2B8A', l: 'Agent',  r: '오케스트라', e: '>>', emoji: '🎯' },
-  web:    { h: '#FF88AA', s: '#E84393', p: '#8B2252', l: 'Web',    r: '웹리서치', e: '@',  emoji: '🌐' },
-  serena: { h: '#FFCC44', s: '#B8860B', p: '#6B4E00', l: 'Serena', r: '심볼분석', e: 'fn', emoji: '🌿' },
+  // 1F Execution — 실행 계층: Gateway + Orchestrator + CommandExecutor
+  commander:  { h: '#C4963D', s: '#A87830', p: '#7A5520', l: 'Commander',  r: '제어 평면',  e: '>>', emoji: '⚡' },
+  operator:   { h: '#4A6741', s: '#3D5939', p: '#2A3D28', l: 'Operator',   r: '실행 엔진',  e: '>_', emoji: '🖥' },
+  // 2F Analysis — 분석 계층: Code Intelligence + Audit Trail
+  architect:  { h: '#5B7DB1', s: '#4A6A9E', p: '#3A5480', l: 'Architect',  r: '코드 지능',  e: '</>', emoji: '🔧' },
+  inspector:  { h: '#8B5E9B', s: '#7A4D8A', p: '#5C3468', l: 'Inspector',  r: '감사 분석',  e: '??', emoji: '🔬' },
+  // 3F Connection — 연결 계층: Relay Bridge + Security Shield
+  diplomat:   { h: '#D4694A', s: '#C05A3D', p: '#9A4530', l: 'Diplomat',   r: '통신 브릿지', e: '@>', emoji: '🧭' },
+  guardian:   { h: '#3DA5A5', s: '#2D8A8A', p: '#1D6666', l: 'Guardian',   r: '보안 수호',  e: '::', emoji: '🛡' },
 };
 
 // ── Floor definitions ──
 export const FLOORS: FloorDef[] = [
   { id: 0, name: '1F Execution', nameKo: '1F 실행 계층',
-    colors: { wall: ['#F0F8E8', '#E4F0D8', '#C0D8A0'], floor: ['#5A9E50', '#4D8A44', '#3D7A35'], accent: '#44DD66' } },
+    colors: { wall: ['#E8EFE4', '#D8E4D0', '#B8D0A0'], floor: ['#5A9E50', '#4D8A44', '#3D7A35'], accent: '#44DD66' } },
   { id: 1, name: '2F Analysis', nameKo: '2F 분석 계층',
-    colors: { wall: ['#F0E8FF', '#E4D8F8', '#C0A8E0'], floor: ['#7A6AAA', '#6A5A9A', '#5A4A8A'], accent: '#8866CC' } },
+    colors: { wall: ['#E8E4F0', '#D8CCE8', '#B8A0D0'], floor: ['#7A6AAA', '#6A5A9A', '#5A4A8A'], accent: '#8866CC' } },
   { id: 2, name: '3F Connection', nameKo: '3F 연결 계층',
-    colors: { wall: ['#FFF0E0', '#F8E0C8', '#E0C0A0'], floor: ['#AA7744', '#996633', '#886622'], accent: '#FF8844' } },
+    colors: { wall: ['#F0E8E0', '#E0D4C4', '#D0B8A0'], floor: ['#AA7744', '#996633', '#886622'], accent: '#FF8844' } },
 ];
 
-export const AGENT_FLOOR: Record<string, number> = { bash: 0, writer: 0, reader: 1, finder: 1, serena: 1, mcp: 2, agent: 2, web: 2 };
-export const AT: string[] = ['bash', 'reader', 'writer', 'finder', 'mcp', 'agent', 'web', 'serena'];
+export const AGENT_FLOOR: Record<string, number> = {
+  commander: 0, operator: 0,
+  architect: 1, inspector: 1,
+  diplomat: 2, guardian: 2,
+};
+export const AT: string[] = ['commander', 'operator', 'architect', 'inspector', 'diplomat', 'guardian'];
 
 export const DESKS: DeskDef[] = [
-  { x: .35, label: 'Shell', act: false, floor: 0 }, { x: .19, label: 'Reader', act: false, floor: 1 },
-  { x: .65, label: 'Editor', act: false, floor: 0 }, { x: .43, label: 'Search', act: false, floor: 1 },
-  { x: .22, label: 'MCP', act: false, floor: 2 },    { x: .50, label: 'Agent', act: false, floor: 2 },
-  { x: .78, label: 'Web', act: false, floor: 2 },    { x: .78, label: 'Serena', act: false, floor: 1 },
+  { x: .35, label: 'Gateway', act: false, floor: 0 },
+  { x: .65, label: 'Terminal', act: false, floor: 0 },
+  { x: .35, label: 'CodeBase', act: false, floor: 1 },
+  { x: .65, label: 'AuditLog', act: false, floor: 1 },
+  { x: .35, label: 'Relay', act: false, floor: 2 },
+  { x: .65, label: 'Security', act: false, floor: 2 },
 ];
 
 // ── Tool particle colors ──

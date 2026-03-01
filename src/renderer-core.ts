@@ -2,6 +2,10 @@
 import { S, C, FLOORS, DESKS, AT, DEFAULT_SKY, TOOL_COLORS, WORKER_ROLES } from './state.ts';
 import { getDayPhase } from './utils.ts';
 import type { AgentInstance } from './state.ts';
+import { getDeskForAgent } from './agents.ts';
+
+// ── Active desks helper (static or dynamic) ──
+export function getActiveDesks() { return S.fallbackMode ? DESKS : S.dynamicDesks.length > 0 ? S.dynamicDesks : DESKS; }
 
 // ── Canvas dimension helpers ──
 export function cW(): number { return S.pixiApp ? S.pixiApp.screen.width : ((document.getElementById('c') as HTMLCanvasElement).width / S.dpr); }
@@ -26,11 +30,11 @@ export async function initPixi(): Promise<void> {
     S.bgSprite = new PIXI.Sprite(); S.L.bg!.addChild(S.bgSprite);
     S.L.agents!.sortableChildren = true;
     S.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 6; i++) {
       const ac = document.createElement('canvas'); ac.width = 110 * S.dpr; ac.height = 120 * S.dpr; S.agentCanvases.push(ac);
       const sp = new PIXI.Sprite(); sp.anchor.set(0.5, 0.5); S.agentSprites.push(sp); S.L.agents!.addChild(sp);
     }
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 6; i++) {
       const dc = document.createElement('canvas'); dc.width = 50 * S.dpr; dc.height = 50 * S.dpr; S.deskCanvases.push(dc);
       const sp = new PIXI.Sprite(); sp.visible = false; S.deskSprites.push(sp); S.L.desks!.addChild(sp);
     }
@@ -62,9 +66,49 @@ function initCanvasFallback(): void {
 }
 export function initCanvas(): Promise<void> { return initPixi(); }
 
+// ── Dynamic resource pool ──
+export function ensureAgentResources(index: number): void {
+  if (!S.pixiReady) return;
+  while (S.agentCanvases.length <= index) {
+    const ac = document.createElement('canvas');
+    ac.width = 110 * S.dpr; ac.height = 120 * S.dpr;
+    S.agentCanvases.push(ac);
+    const sp = new PIXI.Sprite();
+    sp.anchor.set(0.5, 0.5);
+    S.agentSprites.push(sp);
+    S.L.agents!.addChild(sp);
+  }
+}
+
+export function releaseAgentResources(index: number): void {
+  if (!S.pixiReady) return;
+  const sp = S.agentSprites[index];
+  if (sp) {
+    if ((sp as unknown as Record<string, unknown>)._tex) {
+      ((sp as unknown as Record<string, unknown>)._tex as PIXI.Texture).destroy(true);
+    }
+    sp.destroy();
+    S.agentSprites[index] = null as unknown as PIXI.Sprite;
+  }
+  S.agentCanvases[index] = null as unknown as HTMLCanvasElement;
+}
+
+export function ensureDeskResources(index: number): void {
+  if (!S.pixiReady) return;
+  while (S.deskCanvases.length <= index) {
+    const dc = document.createElement('canvas');
+    dc.width = 50 * S.dpr; dc.height = 50 * S.dpr;
+    S.deskCanvases.push(dc);
+    const sp = new PIXI.Sprite();
+    sp.visible = false;
+    S.deskSprites.push(sp);
+    S.L.desks!.addChild(sp);
+  }
+}
+
 // ── Character drawing ──
 export function drawCh(px: number, py: number, type: string, wf: number, dir: number, work: boolean, bub: string, ag: AgentInstance | null): void {
-  const cx = S.cx!, fr = S.fr, c = C[type] || C.agent, s = S.P;
+  const cx = S.cx!, fr = S.fr, c = C[type] || C.commander, s = S.P;
   const OL = '#1A1A0A', SK = '#FFD8B0';
   const idle = ag && ag.st === 'idle';
   const flip = dir < 0;
@@ -148,14 +192,49 @@ export function drawCh(px: number, py: number, type: string, wf: number, dir: nu
 function drawAccessory(px: number, y: number, type: string, s: number, sitting: boolean): void {
   const cx = S.cx!, fr = S.fr;
   switch (type) {
-    case 'bash': cx.fillStyle = '#333'; cx.fillRect(px - 5.8 * s, y - 4 * s, 1.2 * s, 3 * s); cx.fillRect(px + 4.6 * s, y - 4 * s, 1.2 * s, 3 * s); cx.fillStyle = '#555'; cx.fillRect(px - 4 * s, y - 7.5 * s, 8 * s, s * .8); break;
-    case 'reader': cx.fillStyle = '#8B6914'; cx.fillRect(px - 4 * s, y - 3.2 * s, 3.2 * s, s * .4); cx.fillRect(px + .8 * s, y - 3.2 * s, 3.2 * s, s * .4); cx.fillRect(px - 4 * s, y - 3.2 * s, s * .3, 2.5 * s); cx.fillRect(px - .8 * s, y - 3.2 * s, s * .3, 2.5 * s); cx.fillRect(px + .8 * s, y - 3.2 * s, s * .3, 2.5 * s); cx.fillRect(px + 3.7 * s, y - 3.2 * s, s * .3, 2.5 * s); cx.fillRect(px - .8 * s, y - 2.5 * s, 1.6 * s, s * .3); break;
-    case 'writer': cx.fillStyle = '#CC2244'; cx.fillRect(px - 5 * s, y - 7.5 * s, 10 * s, 2 * s); cx.fillStyle = '#FF4466'; cx.fillRect(px - 5 * s, y - 7.5 * s, 10 * s, s * .6); cx.fillRect(px - s * .5, y - 8 * s, s, s); break;
-    case 'finder': cx.fillStyle = '#556B2F'; cx.fillRect(px - 5.5 * s, y - 7 * s, 11 * s, 1.5 * s); cx.fillRect(px - 6 * s, y - 5.8 * s, 3 * s, s); break;
-    case 'mcp': cx.fillStyle = '#44DDAA'; cx.fillRect(px - .2 * s, y - 8.5 * s, s * .4, 2 * s); cx.fillStyle = '#00FF88'; cx.fillRect(px - .5 * s, y - 9 * s, s, s); if (fr % 30 < 15) { cx.fillStyle = '#00FF8860'; cx.fillRect(px - s, y - 9.5 * s, 2 * s, 2 * s); } break;
-    case 'agent': if (!sitting) { cx.fillStyle = '#CC3300'; cx.fillRect(px - .5 * s, y + 2.8 * s, s, 2.5 * s); cx.fillRect(px - .8 * s, y + 2.5 * s, 1.6 * s, s * .6); } break;
-    case 'web': cx.fillStyle = '#333'; cx.fillRect(px - 5.8 * s, y - 4 * s, 1.2 * s, 2.5 * s); cx.fillStyle = '#444'; cx.fillRect(px - 6.5 * s, y - 2 * s, 2 * s, 1.5 * s); cx.fillRect(px - 6.5 * s, y - 2 * s, s * .3, 2 * s); break;
-    case 'serena': cx.fillStyle = '#FFD700'; cx.fillRect(px + 3 * s, y - 6 * s, 2.5 * s, 1.5 * s); cx.fillStyle = '#FFA500'; cx.fillRect(px + 3.8 * s, y - 6 * s, s * .8, 1.5 * s); break;
+    case 'commander':
+      // Military beret + command star
+      cx.fillStyle = '#8B6F20'; cx.fillRect(px - 5.5 * s, y - 7.5 * s, 11 * s, 1.5 * s);
+      cx.fillStyle = '#A0842A'; cx.fillRect(px - 6.5 * s, y - 6.5 * s, 4 * s, s);
+      cx.fillStyle = '#FFD700'; cx.fillRect(px + 2.5 * s, y - 7 * s, 1.5 * s, 1.5 * s); // star badge
+      cx.fillStyle = '#FFE44D'; cx.fillRect(px + 2.8 * s, y - 6.7 * s, s * .8, s * .8);
+      if (!sitting) { cx.fillStyle = '#8B6F20'; cx.fillRect(px - 3 * s, y + 2.8 * s, 1.2 * s, s * .4); cx.fillRect(px + 1.8 * s, y + 2.8 * s, 1.2 * s, s * .4); } // epaulettes
+      break;
+    case 'operator':
+      // Headband visor + cable
+      cx.fillStyle = '#333'; cx.fillRect(px - 5.8 * s, y - 4 * s, 1.2 * s, 3 * s); cx.fillRect(px + 4.6 * s, y - 4 * s, 1.2 * s, 3 * s);
+      cx.fillStyle = '#2A5A2A'; cx.fillRect(px - 5 * s, y - 7.5 * s, 10 * s, s * .8); // headband
+      cx.fillStyle = '#44DD66'; cx.fillRect(px + 3.5 * s, y - 7.5 * s, 1.5 * s, s * .8); // visor LED
+      if (fr % 20 < 10) { cx.fillStyle = '#44DD6680'; cx.fillRect(px + 3.5 * s, y - 7.5 * s, 1.5 * s, s * .8); }
+      break;
+    case 'architect':
+      // Glasses + blueprint roll
+      cx.fillStyle = '#5B7DB1'; cx.fillRect(px - 4 * s, y - 3.2 * s, 3.2 * s, s * .4); cx.fillRect(px + .8 * s, y - 3.2 * s, 3.2 * s, s * .4);
+      cx.fillRect(px - .8 * s, y - 2.8 * s, 1.6 * s, s * .3); // bridge
+      cx.fillStyle = '#4A6A9E'; cx.fillRect(px - 4 * s, y - 3.2 * s, s * .3, 1.5 * s); cx.fillRect(px + 3.7 * s, y - 3.2 * s, s * .3, 1.5 * s); // frame
+      if (!sitting) { cx.fillStyle = '#E8DCC0'; cx.fillRect(px + 4 * s, y + 1 * s, 1.8 * s, 4 * s); cx.fillStyle = '#3A5480'; cx.fillRect(px + 4 * s, y + 1 * s, 1.8 * s, s * .4); } // blueprint roll
+      break;
+    case 'inspector':
+      // Detective hat + magnifying glass
+      cx.fillStyle = '#6A4D8A'; cx.fillRect(px - 6 * s, y - 7.5 * s, 12 * s, 1.2 * s); // hat brim
+      cx.fillStyle = '#7A5D9A'; cx.fillRect(px - 4.5 * s, y - 8.5 * s, 9 * s, 2 * s); // hat crown
+      cx.fillStyle = '#5C3468'; cx.fillRect(px - 4.5 * s, y - 7.5 * s, 9 * s, s * .5); // hat band
+      if (!sitting) { cx.strokeStyle = '#8B5E9B'; cx.lineWidth = s * .4; cx.beginPath(); cx.arc(px + 5 * s, y + 4 * s, 1.5 * s, 0, Math.PI * 2); cx.stroke(); cx.fillStyle = '#5C3468'; cx.fillRect(px + 6 * s, y + 5 * s, s * .4, 2 * s); } // magnifying glass
+      break;
+    case 'diplomat':
+      // Communication earpiece + antenna
+      cx.fillStyle = '#D4694A'; cx.fillRect(px + 4.5 * s, y - 3.5 * s, 1.5 * s, 2 * s); // earpiece
+      cx.fillStyle = '#C05A3D'; cx.fillRect(px + 4.8 * s, y - 5 * s, s * .4, 2 * s); // antenna stem
+      cx.fillStyle = '#FF8855'; cx.fillRect(px + 4.5 * s, y - 5.5 * s, 1.2 * s, s * .8); // antenna top
+      if (fr % 30 < 15) { cx.fillStyle = '#FF885560'; cx.fillRect(px + 4.2 * s, y - 5.8 * s, 1.8 * s, 1.2 * s); } // signal pulse
+      break;
+    case 'guardian':
+      // Shield badge + armor plates
+      cx.fillStyle = '#2D8A8A'; cx.fillRect(px - 1 * s, y + 2.5 * s, 2 * s, 2.5 * s); // shield
+      cx.fillStyle = '#3DA5A5'; cx.fillRect(px - .7 * s, y + 2.8 * s, 1.4 * s, 1.8 * s);
+      cx.fillStyle = '#1D6666'; cx.fillRect(px - .3 * s, y + 3 * s, .6 * s, 1 * s); // shield emblem
+      cx.fillStyle = '#2D8A8A40'; cx.fillRect(px - 4 * s, y + 2 * s, 1.5 * s, 3 * s); cx.fillRect(px + 2.5 * s, y + 2 * s, 1.5 * s, 3 * s); // shoulder plates
+      break;
   }
 }
 
@@ -197,15 +276,30 @@ function drawWorkFx(px: number, y: number, type: string, s: number): void {
   const cx = S.cx!, fr = S.fr;
   cx.font = 'bold 9px monospace'; cx.textAlign = 'center'; const phase = fr * .12;
   switch (type) {
-    case 'bash': ['$_', '>_', 'OK', '#!', '~~'].forEach((ch, i) => { const fy = ((fr * 2 + i * 25) % 70); cx.globalAlpha = 1 - fy / 70; cx.fillStyle = '#44DD66'; cx.fillText(ch, px + (Math.sin(i * 2.1) * 3 - 1) * s, y - 8 * s - fy * .4); }); break;
-    case 'reader': for (let i = 0; i < 2; i++) { const fy = ((fr * 1.5 + i * 40) % 60); cx.globalAlpha = .8 - fy / 75; cx.fillStyle = '#FFF'; cx.fillRect(px + (i * 2 - 1) * 5 * s, y - 9 * s - fy * .3, 3 * s, 3.5 * s); cx.fillStyle = '#6688CC'; for (let j = 0; j < 3; j++) cx.fillRect(px + (i * 2 - 1) * 5 * s + s * .3, y - 8.5 * s + j * s - fy * .3, 2.2 * s, s * .25); } break;
-    case 'writer': ['</>', '{;}', 'fn(', '//!', '==='].forEach((ch, i) => { const fy = ((fr * 2.2 + i * 20) % 65); cx.globalAlpha = 1 - fy / 65; cx.fillStyle = ['#FF6699', '#FFAA22', '#88BBFF', '#44DD66', '#CC88FF'][i]; cx.fillText(ch, px + (Math.sin(i * 1.7) * 3.5) * s, y - 8 * s - fy * .35); }); break;
-    case 'finder': ['??', '>>', '**', '..', '!!'].forEach((ch, i) => { const fy = ((fr * 1.8 + i * 22) % 60); cx.globalAlpha = 1 - fy / 60; cx.fillStyle = '#44AA88'; cx.fillText(ch, px + (Math.cos(i * 1.4) * 3) * s, y - 8 * s - fy * .35); }); break;
-    case 'mcp': for (let i = 0; i < 4; i++) { const ang = phase + i * Math.PI / 2, r = (3 + Math.sin(fr * .08 + i) * 1.5) * s; cx.globalAlpha = .5 + Math.sin(fr * .1 + i) * .3; cx.fillStyle = '#44DDAA'; cx.fillRect(px + Math.cos(ang) * r - s * .4, y - 8 * s + Math.sin(ang) * r - s * .4, s * .8, s * .8); } cx.globalAlpha = 1; cx.fillStyle = '#00FF88'; cx.fillRect(px - s * .5, y - 8.5 * s, s, s); break;
-    case 'agent': ['>>','>>', '>>'].forEach((_, i) => { const fx = ((fr * 3 + i * 30) % 80) - 40; cx.globalAlpha = 1 - Math.abs(fx) / 40; cx.fillStyle = '#AA88FF'; cx.fillRect(px + fx * .5, y - 8 * s - i * 2 * s, s * 1.5, s * .8); }); break;
-    case 'web': ['@', '://', 'GET', '200', 'www'].forEach((ch, i) => { const fy = ((fr * 2 + i * 18) % 55); cx.globalAlpha = 1 - fy / 55; cx.fillStyle = '#FF88AA'; cx.fillText(ch, px + (Math.sin(i * 2.3) * 3) * s, y - 8 * s - fy * .35); }); break;
-    case 'serena': cx.fillStyle = '#B8860B'; cx.globalAlpha = .7; cx.fillRect(px - s * .3, y - 11 * s, s * .6, 4 * s);
-      [[-2, -2], [2, -2.5], [-1.5, -3.5], [1.5, -4], [0, -5]].forEach(([bx, by], i) => { cx.fillStyle = ['#44AA44', '#228B22', '#66CC66', '#44AA44', '#88DD88'][i]; cx.globalAlpha = .5 + Math.sin(fr * .06 + i) * .3; cx.fillRect(px + bx * s, y - 11 * s + by * s, s * 1.2, s * 1.2); }); break;
+    case 'commander':
+      // Dispatch pulses + command arrows
+      ['>>', '=>', '!!', '>>'].forEach((_, i) => { const fx = ((fr * 3 + i * 30) % 80) - 40; cx.globalAlpha = 1 - Math.abs(fx) / 40; cx.fillStyle = '#C4963D'; cx.fillRect(px + fx * .5, y - 8 * s - i * 2 * s, s * 1.5, s * .8); });
+      cx.fillStyle = '#FFD700'; cx.globalAlpha = .4 + Math.sin(fr * .08) * .2; cx.fillRect(px - s, y - 10 * s, 2 * s, s * .3); cx.globalAlpha = 1; break;
+    case 'operator':
+      // Terminal text streaming
+      ['$_', '>_', 'OK', '#!', '~~'].forEach((ch, i) => { const fy = ((fr * 2 + i * 25) % 70); cx.globalAlpha = 1 - fy / 70; cx.fillStyle = '#44DD66'; cx.fillText(ch, px + (Math.sin(i * 2.1) * 3 - 1) * s, y - 8 * s - fy * .4); }); break;
+    case 'architect':
+      // Colorful code tokens
+      ['</>', '{;}', 'fn(', '//!', '==='].forEach((ch, i) => { const fy = ((fr * 2.2 + i * 20) % 65); cx.globalAlpha = 1 - fy / 65; cx.fillStyle = ['#5B7DB1', '#FFAA22', '#88BBFF', '#44DD66', '#CC88FF'][i]; cx.fillText(ch, px + (Math.sin(i * 1.7) * 3.5) * s, y - 8 * s - fy * .35); }); break;
+    case 'inspector':
+      // Scanner patterns + search indicators
+      ['??', '>>',  '**', '..', '!!'].forEach((ch, i) => { const fy = ((fr * 1.8 + i * 22) % 60); cx.globalAlpha = 1 - fy / 60; cx.fillStyle = '#8B5E9B'; cx.fillText(ch, px + (Math.cos(i * 1.4) * 3) * s, y - 8 * s - fy * .35); });
+      // Scan sweep line
+      cx.fillStyle = '#8B5E9B30'; const sweepY = y - 10 * s + ((fr * 2) % 40) * s * .15; cx.fillRect(px - 4 * s, sweepY, 8 * s, s * .3); break;
+    case 'diplomat':
+      // Network indicators + connection pulses
+      ['@', '://', 'GET', '200', 'www'].forEach((ch, i) => { const fy = ((fr * 2 + i * 18) % 55); cx.globalAlpha = 1 - fy / 55; cx.fillStyle = '#D4694A'; cx.fillText(ch, px + (Math.sin(i * 2.3) * 3) * s, y - 8 * s - fy * .35); }); break;
+    case 'guardian':
+      // MCP node graph + shield aura
+      for (let i = 0; i < 4; i++) { const ang = phase + i * Math.PI / 2, r = (3 + Math.sin(fr * .08 + i) * 1.5) * s; cx.globalAlpha = .5 + Math.sin(fr * .1 + i) * .3; cx.fillStyle = '#3DA5A5'; cx.fillRect(px + Math.cos(ang) * r - s * .4, y - 8 * s + Math.sin(ang) * r - s * .4, s * .8, s * .8); }
+      cx.globalAlpha = .2 + Math.sin(fr * .06) * .1; cx.strokeStyle = '#3DA5A5'; cx.lineWidth = s * .3;
+      cx.beginPath(); cx.arc(px, y - 8 * s, 4 * s, 0, Math.PI * 2); cx.stroke();
+      cx.globalAlpha = 1; break;
   }
   cx.globalAlpha = 1;
 }
@@ -307,8 +401,9 @@ export function buildBg(w: number, h: number): void {
     else if (S.currentFloor === 2) { const mx2 = w * .05, my2 = _dfy - 28 * _ds / 5, mw = 16 * _ds / 5, mh = 12 * _ds / 5; g.fillStyle = '#5A4A3A'; g.fillRect(mx2 - 1, my2 - 1, mw + 2, mh + 2); g.fillStyle = '#2244AA'; g.fillRect(mx2, my2, mw, mh); g.fillStyle = '#44AA44'; g.fillRect(mx2 + 2, my2 + 2, 4 * _ds / 5, 5 * _ds / 5); g.fillRect(mx2 + 8 * _ds / 5, my2 + 1, 4 * _ds / 5, 4 * _ds / 5); g.fillRect(mx2 + 12 * _ds / 5, my2 + 3, 3 * _ds / 5, 4 * _ds / 5); const dots: [number, number][] = [[3, 3], [10, 2], [13, 5]]; dots.forEach(([dx, dy]) => { if (Math.sin(S.fr * .1 + dx * 2) > .3) { g.fillStyle = '#FF884080'; g.beginPath(); g.arc(mx2 + dx * _ds / 5, my2 + dy * _ds / 5, 1.5, 0, 6.28); g.fill(); } }); const ax = w * .93, ay = _dfy - 20; g.fillStyle = '#888'; g.fillRect(ax, ay + 6, 2, 10); g.strokeStyle = '#AAA'; g.lineWidth = 1.5; g.beginPath(); g.arc(ax + 1, ay + 4, 6, Math.PI * .8, Math.PI * 1.8); g.stroke(); g.fillStyle = '#FF884060'; g.beginPath(); g.arc(ax + 1, ay + 4, 2, 0, 6.28); g.fill(); for (let si = 1; si <= 3; si++) { const a2 = .3 + Math.sin(S.fr * .06 + si) * .15; g.strokeStyle = `rgba(255,136,68,${a2})`; g.lineWidth = .8; g.beginPath(); g.arc(ax + 1, ay + 4, 4 + si * 3, -.6, -.2); g.stroke(); } }
   }
   // Desks
-  DESKS.filter(d => S.viewMode === 'building' || d.floor === S.currentFloor).forEach((d) => {
-    const di = DESKS.indexOf(d), x = d.x * w, dy = fy + 2, ds = s * .8, ac = C[AT[di]];
+  const activeDesks = getActiveDesks();
+  activeDesks.filter(d => S.viewMode === 'building' || d.floor === S.currentFloor).forEach((d) => {
+    const di = activeDesks.indexOf(d), x = d.x * w, dy = fy + 2, ds = s * .8, ac = C[AT[di] || 'commander'] || C.commander;
     g.fillStyle = '#1A1A0A'; g.fillRect(x - 8 * s - 1, dy - 1, 16 * s + 2, 2.5 * ds + 2);
     g.fillStyle = '#A07848'; g.fillRect(x - 8 * s, dy, 16 * s, 2.5 * ds);
     g.fillStyle = '#8B683030'; for (let i = 0; i < 3; i++) g.fillRect(x - 7 * s, dy + i * ds * .8 + ds * .2, 14 * s, 1);
@@ -342,18 +437,130 @@ export function drawActiveScreen(x: number, fy: number, agentType: string): void
   const cx = S.cx!, fr = S.fr, s = S.P, dy = fy + 2;
   const sx = x - 3.2 * s, sy = dy - 7.5 * s, sw = 6.4 * s, sh = 5.8 * s, scroll = fr * .8;
   switch (agentType) {
-    case 'bash': cx.fillStyle = '#0A1A0A'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#44DD66'; ['$ git status', 'M  src/app.ts', '$ npm run build', '\u2713 compiled OK', '$ node server'].forEach((l, i) => { const ly = ((i * s * 1.2 + scroll) % (sh + s * 1.2)) - s * 1.2; if (ly > 0 && ly < sh) { cx.font = '6px monospace'; cx.textAlign = 'left'; cx.fillText(l, sx + 2, sy + ly + 6); } }); if (fr % 40 < 25) cx.fillRect(sx + sw - s * 1.5, sy + sh - s * 1.2, s * .6, s * .8); break;
-    case 'reader': cx.fillStyle = '#0A0A2A'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#6688CC'; for (let i = 0; i < 6; i++) { const lw = [4, 5.5, 3, 5, 4.5, 2.5][i] * s; cx.fillRect(sx + s * .3, sy + s * .4 + i * s * .9, Math.min(lw, sw - s), s * .4); } cx.fillStyle = '#FFDD4430'; cx.fillRect(sx, sy + s * .3 + ((fr >> 4) % 5) * s * .9, sw, s * .6); break;
-    case 'writer': cx.fillStyle = '#1E1E2E'; cx.fillRect(sx, sy, sw, sh); const cLines: Array<Array<{ c: string; t: string }>> = [[{ c: '#C678DD', t: 'const' }, { c: '#ABB2BF', t: ' x =' }], [{ c: '#C678DD', t: 'func' }, { c: '#61AFEF', t: ' run' }], [{ c: '#98C379', t: '  "ok"' }], [{ c: '#E06C75', t: '  if' }, { c: '#ABB2BF', t: ' err' }], [{ c: '#56B6C2', t: '  ret' }, { c: '#D19A66', t: ' 42' }], [{ c: '#C678DD', t: '}' }]]; cx.font = '6px monospace'; cx.textAlign = 'left'; cLines.forEach((parts, i) => { let lx = sx + 2; parts.forEach(p => { cx.fillStyle = p.c; cx.fillText(p.t, lx, sy + 7 + i * s * 1.1); lx += p.t.length * 3.5; }); }); cx.fillStyle = '#5C6370'; for (let i = 0; i < 5; i++) cx.fillText('' + (i + 1), sx - 1, sy + 7 + i * s * 1.1); break;
-    case 'finder': cx.fillStyle = '#1A1A2A'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#44AA88'; cx.font = '6px monospace'; cx.textAlign = 'left'; cx.fillText('? grep', sx + 2, sy + 7); cx.fillStyle = '#888'; ['src/a.ts:12', 'lib/b.js:45', 'pkg/c.rs:89'].forEach((l, i) => cx.fillText(l, sx + 2, sy + 7 + (i + 1) * s * 1.2)); cx.fillStyle = '#FFDD4440'; cx.fillRect(sx + s * 2, sy + s * 1.3 + ((fr >> 4) % 3) * s * 1.2, s * 2, s * .8); break;
-    case 'mcp': cx.fillStyle = '#0A1A1A'; cx.fillRect(sx, sy, sw, sh); const nodes: [number, number][] = [[.3, .3], [.7, .25], [.5, .6], [.2, .7], [.8, .7]]; cx.fillStyle = '#44DDAA'; nodes.forEach(([nx, ny]) => cx.fillRect(sx + sw * nx - 2, sy + sh * ny - 2, 4, 4)); cx.fillStyle = '#44DDAA40'; [[0, 1], [0, 2], [1, 2], [2, 3], [2, 4]].forEach(([a, b]) => { const [ax, ay] = nodes[a], [bx, by] = nodes[b]; const prog = ((fr * .02 + a * .3) % 1); cx.fillRect(sx + sw * (ax + (bx - ax) * prog) - 1, sy + sh * (ay + (by - ay) * prog) - 1, 3, 3); }); break;
-    case 'agent': cx.fillStyle = '#1A1020'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#AA88FF'; cx.font = '6px monospace'; cx.textAlign = 'left'; cx.fillText('TASKS', sx + 2, sy + 7); ['#1 run', '#2 build', '#3 test'].forEach((l, i) => { cx.fillStyle = i === ((fr >> 5) % 3) ? '#FFDD44' : '#8866CC'; cx.fillText(' ' + l, sx + 2, sy + 14 + i * s * 1.1); }); break;
-    case 'web': cx.fillStyle = '#FFF'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#E8E8E8'; cx.fillRect(sx, sy, sw, s * 1.2); cx.fillStyle = '#888'; cx.font = '5px monospace'; cx.textAlign = 'left'; cx.fillText('https://', sx + 2, sy + s * .9); cx.fillStyle = '#EEEEFF'; cx.fillRect(sx + s * .3, sy + s * 1.8, sw - s * .6, s * 1.5); cx.fillStyle = '#DDDDEE'; cx.fillRect(sx + s * .3, sy + s * 3.6, sw * .5, s * 1); cx.fillStyle = '#CCDDFF'; cx.fillRect(sx + s * .3 + sw * .55, sy + s * 3.6, sw * .35, s * 1); break;
-    case 'serena': cx.fillStyle = '#1A1510'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#B8860B'; cx.font = '6px monospace'; cx.textAlign = 'left'; ['class Foo', '  fn bar', '  fn baz', '  val x', 'impl Tr'].forEach((l, i) => { cx.fillStyle = i === ((fr >> 4) % 5) ? '#FFD080' : '#8B6914'; cx.fillText(l, sx + 2, sy + 7 + i * s * 1); }); break;
-    default: cx.fillStyle = '#114422'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#44DD66'; cx.fillRect(sx + s * .4, sy + s * .5, 3.5 * s, s * .6); cx.fillRect(sx + s * .4, sy + s * 1.8, 5 * s, s * .6); if (fr % 60 < 35) cx.fillRect(sx + s * 3, sy + sh - s * 1.5, s * .7, s * .7);
+    case 'commander': {
+      // Gateway control plane — lane stats + task queue
+      cx.fillStyle = '#1A1020'; cx.fillRect(sx, sy, sw, sh);
+      cx.fillStyle = '#C4963D'; cx.font = '6px monospace'; cx.textAlign = 'left';
+      cx.fillText('GATEWAY', sx + 2, sy + 7);
+      const ls = S.lastLaneStats;
+      if (ls) {
+        cx.fillStyle = '#FFD700'; cx.fillText('Q:' + (ls.pending || 0), sx + 2, sy + 15);
+        cx.fillStyle = ls.running > 0 ? '#44DD66' : '#666'; cx.fillText('R:' + (ls.running || 0), sx + sw * .4, sy + 15);
+        cx.fillStyle = '#888'; cx.fillText('D:' + (ls.completed || 0), sx + 2, sy + 23);
+        if (ls.locked) { cx.fillStyle = '#FF6644'; cx.fillText('LCK', sx + sw * .5, sy + 23); }
+      } else {
+        const items = ['#1 run', '#2 build', '#3 test'];
+        items.forEach((l, i) => { cx.fillStyle = i === ((fr >> 5) % 3) ? '#FFD700' : '#A07830'; cx.fillText(' ' + l, sx + 2, sy + 14 + i * s * 1.1); });
+      }
+      // Active sessions count
+      const nSess = S.sessionRegistry.size || (S.serverMetrics?.sessions ?? 0);
+      if (nSess > 0) { cx.fillStyle = '#C4963D50'; cx.fillRect(sx + 1, sy + sh - s * 1.5, sw - 2, s * 1.2); cx.fillStyle = '#FFD700'; cx.fillText('S:' + nSess, sx + 2, sy + sh - s * .5); }
+      break;
+    }
+    case 'operator': {
+      // Terminal console — last commands from history
+      cx.fillStyle = '#0A1A0A'; cx.fillRect(sx, sy, sw, sh);
+      cx.fillStyle = '#44DD66'; cx.font = '6px monospace'; cx.textAlign = 'left';
+      // Show recent commands if available, else fallback
+      const cmds = S.cmdHistory.slice(0, 5).map(c => (c.status === 'completed' ? '\u2713' : c.status === 'failed' ? '\u2717' : '>') + ' ' + c.command.slice(0, 12));
+      const lines = cmds.length > 0 ? cmds : ['$ git status', 'M  src/app.ts', '$ npm build', '\u2713 compiled', '$ node srv'];
+      lines.forEach((l, i) => { const ly = ((i * s * 1.2 + scroll) % (sh + s * 1.2)) - s * 1.2; if (ly > 0 && ly < sh) { cx.fillText(l, sx + 2, sy + ly + 6); } });
+      if (fr % 40 < 25) cx.fillRect(sx + sw - s * 1.5, sy + sh - s * 1.2, s * .6, s * .8);
+      break;
+    }
+    case 'architect': {
+      // Code editor — real file ops or syntax-highlighted fallback
+      cx.fillStyle = '#1E1E2E'; cx.fillRect(sx, sy, sw, sh);
+      cx.font = '6px monospace'; cx.textAlign = 'left';
+      const fileOps = S.entries.slice(-20).filter(e => (e as Record<string, unknown>).tool === 'Read' || (e as Record<string, unknown>).tool === 'Write' || (e as Record<string, unknown>).tool === 'Edit').slice(-5);
+      if (fileOps.length > 0) {
+        fileOps.forEach((e, i) => {
+          const entry = e as Record<string, unknown>;
+          const fname = ((entry.path as string) || '').split(/[/\\]/).pop() || '';
+          cx.fillStyle = entry.tool === 'Write' ? '#98C379' : entry.tool === 'Edit' ? '#E06C75' : '#61AFEF';
+          cx.fillText((entry.tool as string || '')[0] + ' ' + fname.slice(0, 10), sx + 2, sy + 7 + i * s * 1.1);
+        });
+      } else {
+        const cLines: Array<Array<{ c: string; t: string }>> = [[{ c: '#C678DD', t: 'const' }, { c: '#ABB2BF', t: ' x =' }], [{ c: '#C678DD', t: 'func' }, { c: '#61AFEF', t: ' run' }], [{ c: '#98C379', t: '  "ok"' }], [{ c: '#E06C75', t: '  if' }, { c: '#ABB2BF', t: ' err' }], [{ c: '#56B6C2', t: '  ret' }, { c: '#D19A66', t: ' 42' }], [{ c: '#5B7DB1', t: '}' }]];
+        cLines.forEach((parts, i) => { let lx = sx + 2; parts.forEach(p => { cx.fillStyle = p.c; cx.fillText(p.t, lx, sy + 7 + i * s * 1.1); lx += p.t.length * 3.5; }); });
+      }
+      // Project context indicator
+      if (S.projectContext) { cx.fillStyle = S.projectContext.color || '#5B7DB1'; cx.fillRect(sx, sy + sh - 2, sw, 2); }
+      break;
+    }
+    case 'inspector': {
+      // Audit log dashboard — real error counts + tool stats
+      cx.fillStyle = '#1A1A2A'; cx.fillRect(sx, sy, sw, sh);
+      cx.fillStyle = '#8B5E9B'; cx.font = '6px monospace'; cx.textAlign = 'left';
+      cx.fillText('AUDIT', sx + 2, sy + 7);
+      const errs = S._localErrors || 0;
+      const total = S.entries.length;
+      cx.fillStyle = errs > 0 ? '#FF6644' : '#44DD66';
+      cx.fillText('E:' + errs, sx + sw * .55, sy + 7);
+      // Top tool groups
+      const groups = Object.entries(S.groupStats).sort((a, b) => b[1].total - a[1].total).slice(0, 3);
+      groups.forEach(([g, st], i) => {
+        cx.fillStyle = st.errors > 0 ? '#FF886680' : '#8B5E9B80';
+        const barW = Math.min(sw - s * .8, (st.total / Math.max(total, 1)) * sw * 3);
+        cx.fillRect(sx + 2, sy + 12 + i * s * 1.3, barW, s * .9);
+        cx.fillStyle = '#CCC'; cx.fillText(g.slice(0, 6) + ':' + st.total, sx + 3, sy + 12 + i * s * 1.3 + s * .7);
+      });
+      // Scan sweep
+      cx.fillStyle = '#8B5E9B20'; const sweepY = sy + s * .5 + ((fr * 2) % 40) * s * .12; cx.fillRect(sx, sweepY, sw, s * .2);
+      break;
+    }
+    case 'diplomat': {
+      // Relay connection status — Supabase/SSE state
+      cx.fillStyle = '#1A0F0A'; cx.fillRect(sx, sy, sw, sh);
+      cx.fillStyle = '#D4694A'; cx.font = '6px monospace'; cx.textAlign = 'left';
+      cx.fillText('RELAY', sx + 2, sy + 7);
+      // Connection state indicator
+      cx.fillStyle = S.connected ? '#44DD66' : '#FF4444';
+      cx.fillRect(sx + sw - s * 1.2, sy + 2, s * .8, s * .8);
+      cx.fillStyle = '#AAA';
+      cx.fillText(S.sseActive ? 'SSE:' + (S.ssePort || '?') : 'WS', sx + 2, sy + 15);
+      // Relay uptime
+      if (S.relayUptime > 0) { cx.fillStyle = '#D4694A'; cx.fillText('UP:' + Math.floor(S.relayUptime / 60) + 'm', sx + sw * .45, sy + 15); }
+      // Server metrics (ops/min)
+      const opm = S.serverMetrics?.opsPerMin || 0;
+      if (opm > 0) { cx.fillStyle = '#FF8855'; cx.fillText(opm.toFixed(0) + ' op/m', sx + 2, sy + 23); }
+      // Tick health
+      const tickAge = S.lastTick ? Math.floor((Date.now() - S.lastTick) / 1000) : -1;
+      if (tickAge >= 0) { cx.fillStyle = tickAge < 35 ? '#44DD66' : '#FF6644'; cx.fillText('T:' + tickAge + 's', sx + sw * .55, sy + 23); }
+      // Animated signal waves
+      for (let i = 0; i < 3; i++) { const a2 = .2 + Math.sin(fr * .06 + i * 1.5) * .15; cx.globalAlpha = a2; cx.strokeStyle = '#D4694A'; cx.lineWidth = .5; cx.beginPath(); cx.arc(sx + sw * .8, sy + sh * .7, s * (1 + i * .8), -.5, .5); cx.stroke(); } cx.globalAlpha = 1;
+      break;
+    }
+    case 'guardian': {
+      // Security dashboard — approve/deny pipeline
+      cx.fillStyle = '#0A1A1A'; cx.fillRect(sx, sy, sw, sh);
+      cx.fillStyle = '#3DA5A5'; cx.font = '6px monospace'; cx.textAlign = 'left';
+      cx.fillText('SHIELD', sx + 2, sy + 7);
+      const ap = S.pipelineStatus.approves, dn = S.pipelineStatus.denies;
+      const total = ap + dn;
+      // Approve/deny bar
+      if (total > 0) {
+        const apW = (ap / total) * (sw - 4);
+        cx.fillStyle = '#44DD6680'; cx.fillRect(sx + 2, sy + 11, apW, s * .8);
+        cx.fillStyle = '#FF444480'; cx.fillRect(sx + 2 + apW, sy + 11, sw - 4 - apW, s * .8);
+      }
+      cx.fillStyle = '#44DD66'; cx.fillText('OK:' + ap, sx + 2, sy + 22);
+      cx.fillStyle = dn > 0 ? '#FF6644' : '#666'; cx.fillText('DN:' + dn, sx + sw * .45, sy + 22);
+      // Shield aura (pulses on deny)
+      const pulse = dn > 0 ? Math.sin(fr * .15) * .3 + .5 : .2;
+      cx.globalAlpha = pulse; cx.strokeStyle = dn > 0 ? '#FF4444' : '#3DA5A5'; cx.lineWidth = s * .2;
+      cx.beginPath(); cx.arc(sx + sw / 2, sy + sh * .65, s * 1.5, 0, Math.PI * 2); cx.stroke();
+      cx.globalAlpha = 1;
+      // Block rate from server metrics
+      const br = S.serverMetrics?.blockRate;
+      if (br !== undefined && br > 0) { cx.fillStyle = '#FF8855'; cx.fillText('BR:' + br.toFixed(1) + '%', sx + 2, sy + sh - s * .4); }
+      break;
+    }
+    default:
+      cx.fillStyle = '#114422'; cx.fillRect(sx, sy, sw, sh); cx.fillStyle = '#44DD66'; cx.fillRect(sx + s * .4, sy + s * .5, 3.5 * s, s * .6); cx.fillRect(sx + s * .4, sy + s * 1.8, 5 * s, s * .6); if (fr % 60 < 35) cx.fillRect(sx + s * 3, sy + sh - s * 1.5, s * .7, s * .7);
   }
   cx.fillStyle = '#00000012'; for (let i = 0; i < sh; i += 2) cx.fillRect(sx, sy + i, sw, 1);
-  cx.fillStyle = agentType === 'web' ? '#FFFFFF08' : '#44FF6608'; cx.fillRect(sx - 1, sy - 1, sw + 2, sh + 2);
+  cx.fillStyle = agentType === 'diplomat' ? '#FFFFFF08' : '#44FF6608'; cx.fillRect(sx - 1, sy - 1, sw + 2, sh + 2);
 }
 
 // ── Particle texture cache (PixiJS) ──
