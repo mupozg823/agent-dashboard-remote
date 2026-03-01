@@ -609,18 +609,34 @@ const FLOORS=[
     colors:{wall:['#FFF0E0','#F8E0C8','#E0C0A0'],floor:['#AA7744','#996633','#886622'],accent:'#FF8844'}},
 ];
 const AGENT_FLOOR={bash:0,writer:0,reader:1,finder:1,serena:1,mcp:2,agent:2,web:2};
-let currentFloor=0, viewMode='floor', floorBgCache=[null,null,null], floorAnim=0, floorAnimDir=0;
+let currentFloor=0, viewMode='floor', floorBgCache=[null,null,null], floorTransition=null;
 let elevatorPackets=[];
 // Building view hit areas for floor click
 let buildingFloorHits=[]; // [{fi, x, y, w, h}]
 // Swipe state for floor navigation
 let swipeStartY=0, swipeStartTime=0, swipeActive=false;
 
+function finishFloorTransition(){
+  if(!floorTransition)return;
+  if(floorTransition.fromSprite){
+    const tex=floorTransition.fromSprite.texture;
+    if(tex&&tex!==PIXI.Texture.EMPTY)tex.destroy(true);
+    floorTransition.fromSprite.destroy();
+    floorTransition.fromSprite=null;
+  }
+  if(floorTransition._divLine){floorTransition._divLine.destroy();floorTransition._divLine=null}
+  floorTransition.fromBg=null;
+  floorTransition=null;
+  if(bgSprite)bgSprite.y=0;
+}
+
 function switchFloor(idx){
-  if(idx===currentFloor&&viewMode==='floor')return;
+  if(idx<0||idx>2||idx===currentFloor)return;
+  if(floorTransition)finishFloorTransition();
+  const dir=idx>currentFloor?1:-1;
+  floorTransition={from:currentFloor,to:idx,progress:0,eased:0,dir,fromBg:bg,fromSprite:null,startTime:performance.now()};
   if(viewMode==='building')viewMode='floor';
-  floorAnimDir=idx>currentFloor?1:-1;floorAnim=1;currentFloor=idx;
-  // Force bg rebuild
+  currentFloor=idx;
   bg=null;
   document.querySelectorAll('.floor-btn[data-f]').forEach(b=>{
     if(b.dataset.f==='b')b.classList.remove('active');
@@ -633,6 +649,7 @@ function switchFloor(idx){
 }
 
 function toggleBuildingView(){
+  if(floorTransition)finishFloorTransition();
   viewMode=viewMode==='building'?'floor':'building';
   document.querySelectorAll('.floor-btn').forEach(b=>{
     if(b.dataset.f==='b')b.classList.toggle('active',viewMode==='building');
@@ -1916,6 +1933,25 @@ function gameLoop(){
     bgSprite.texture=bgSprite._tex;
     bgSprite.width=w;bgSprite.height=h;
   }
+  // Floor transition animation (PixiJS)
+  if(floorTransition){
+    const ft=floorTransition;
+    ft.progress=Math.min((performance.now()-ft.startTime)/400,1);
+    ft.eased=1-(1-ft.progress)*(1-ft.progress);
+    if(!ft.fromSprite&&ft.fromBg&&L.bg){
+      ft.fromSprite=new PIXI.Sprite(PIXI.Texture.from(ft.fromBg));
+      ft.fromSprite.width=w;ft.fromSprite.height=h;
+      L.bg.addChild(ft.fromSprite);
+    }
+    if(ft.fromSprite)ft.fromSprite.y=ft.dir*ft.eased*h;
+    bgSprite.y=-ft.dir*(1-ft.eased)*h;
+    if(L.effects){
+      if(!ft._divLine){ft._divLine=new PIXI.Graphics();L.effects.addChild(ft._divLine)}
+      const bndY=ft.dir>0?ft.eased*h:(1-ft.eased)*h;
+      ft._divLine.clear().rect(0,bndY-1,w,2).fill({color:0xFFD080,alpha:0.4*(1-ft.eased)});
+    }
+    if(ft.progress>=1)finishFloorTransition();
+  }
 
   // Screen shake via stage transform
   if(shakeFrames>0){
@@ -1955,6 +1991,7 @@ function gameLoop(){
       deskSprites[i].texture=deskSprites[i]._tex;
       deskSprites[i].x=d.x*w-3.2*s;deskSprites[i].y=fy+2-7.5*s;
       deskSprites[i].visible=true;
+      deskSprites[i].alpha=floorTransition?floorTransition.eased:1;
     }else if(deskSprites[i]){
       deskSprites[i].visible=false;
     }
@@ -1986,6 +2023,7 @@ function gameLoop(){
       sp.x=a.x*w;sp.y=a.y*h;
       sp.zIndex=Math.floor(a.y*1000);
       sp.visible=true;
+      sp.alpha=floorTransition?floorTransition.eased:1;
     }
   });
   L.agents.sortableChildren=true;
@@ -2358,13 +2396,26 @@ function render(ts){
   let sx=0,sy=0;
   if(shakeFrames>0){sx=(Math.random()-.5)*shakeIntensity;sy=(Math.random()-.5)*shakeIntensity;shakeFrames--}
   cx.save();cx.translate(sx,sy);
-  cx.drawImage(bg,0,0,bg.width,bg.height,0,0,w,h);
+  if(floorTransition){
+    const ft=floorTransition;
+    ft.progress=Math.min((performance.now()-ft.startTime)/400,1);
+    ft.eased=1-(1-ft.progress)*(1-ft.progress);
+    if(ft.fromBg)cx.drawImage(ft.fromBg,0,0,ft.fromBg.width,ft.fromBg.height,0,ft.dir*ft.eased*h,w,h);
+    cx.drawImage(bg,0,0,bg.width,bg.height,0,-ft.dir*(1-ft.eased)*h,w,h);
+    const bndY=ft.dir>0?ft.eased*h:(1-ft.eased)*h;
+    cx.globalAlpha=0.4*(1-ft.eased);cx.fillStyle='#FFD080';cx.fillRect(0,bndY-1,w,2);cx.globalAlpha=1;
+    if(ft.progress>=1)finishFloorTransition();
+  }else{
+    cx.drawImage(bg,0,0,bg.width,bg.height,0,0,w,h);
+  }
   drawWeather(w,h);
   const fy=h*.55;
+  if(floorTransition)cx.globalAlpha=floorTransition.eased;
   DESKS.forEach((d,i)=>{if(d.act&&d.floor===currentFloor)drawActiveScreen(d.x*w,fy,AT[i])});
   agents.forEach(a=>a.up());
   agents.sort((a,b)=>a.y-b.y);
   agents.filter(a=>a.floor===currentFloor).forEach(a=>a.draw(w,h));
+  if(floorTransition)cx.globalAlpha=1;
   updateFloorBadges();
   drawPts();
   updateFloatingTexts();
