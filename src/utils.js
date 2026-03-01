@@ -22,13 +22,16 @@ export function t2a(t) {
   if (['Write', 'Edit', 'NotebookEdit'].includes(t)) return 2;
   if (t === 'Grep' || t === 'Glob') return 3;
   if (t === 'WebSearch' || t === 'WebFetch') return 6;
-  if (['Task', 'Skill', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop', 'TaskOutput', 'AskUserQuestion', 'EnterPlanMode', 'ExitPlanMode'].includes(t)) return 5;
-  if (t === 'ToolSearch') return 3;
+  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(t)) return 5;
+  if (['Skill', 'EnterPlanMode', 'ExitPlanMode'].includes(t)) return 4; // mcp — 연결 계층
+  if (['Task', 'TaskStop', 'TaskOutput', 'AskUserQuestion'].includes(t)) return 6; // web — 연결 계층
+  if (t === 'ToolSearch') return 4; // mcp — 도구 검색은 연결 계층
+  if (t === 'Agent') return 5;
   if (t.startsWith('mcp__serena')) return 7;
   if (t.startsWith('mcp__grep')) return 3;
-  if (t.startsWith('mcp__context7')) return 6;
+  if (t.startsWith('mcp__context7')) return 4; // mcp — 외부 문서 연결
   if (t.startsWith('mcp__filesystem')) return 1;
-  if (t.startsWith('mcp__memory')) return 5;
+  if (t.startsWith('mcp__memory')) return 4; // mcp — 지식 연결
   if (t.startsWith('mcp__seq')) return 5;
   if (t.startsWith('mcp__claude_ai_Notion')) return 6;
   if (t.startsWith('mcp__')) return 4;
