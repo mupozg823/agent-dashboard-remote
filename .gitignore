@@ -2,3 +2,5 @@ node_modules
 dist
 logs
 .vercel
+index.monolithic-backup.html
+index.old.html

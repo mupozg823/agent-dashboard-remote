@@ -1,18 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1A1A3A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;에이전트 개발국&quot;,&quot;short_name&quot;:&quot;개발국&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%231A1A3A&quot;,&quot;theme_color&quot;:&quot;%231A1A3A&quot;}">
+<title>에이전트 개발국 ++ (Remote)</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
+<style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --gold:#FFD080;--gold-d:#8B6914;--gold-dd:#5A4008;--bg:#E8D8C0;--panel:#FFF0D0;--text:#2A1B0A;
   --ok:#44AA44;--err:#CC3300;--warn:#CCAA22;--info:#6666CC;--accent:#CC6600;
   --safe:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+  --cream:#F5F1E8;--warm-red:#D4523C;--muted-teal:#6B9A8E;--rust:#8B6F47;
+  --warm-bg:#E8DCC8;--accent-gold:#D4A032;--kairo-border:#C4A06A;--kairo-panel:#FFF6E8;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;background:#1A1A3A;color:var(--text);overflow:hidden;
   height:100vh;height:100dvh;user-select:none;-webkit-tap-highlight-color:transparent;
   -webkit-font-smoothing:antialiased;touch-action:manipulation}
-
-/* ── App Shell ── */
 .app{display:flex;flex-direction:column;height:100vh;height:100dvh;position:relative}
-
-/* ── Top Bar ── */
 .top{background:#1A1A3A;border-bottom:3px solid var(--gold-d);display:flex;align-items:center;
   padding:2px 10px;padding-top:calc(2px + var(--safe-t));gap:8px;min-height:40px;flex-shrink:0;z-index:20}
 .top .live{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:all .3s}
@@ -27,25 +39,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans
 .stat b{color:var(--gold);font-size:12px}
 .stat .delta{font-size:8px;margin-left:1px}
 .stat .delta.up{color:#44CC44}.stat .delta.dn{color:#CC3300}
-
-/* ── Scene ── */
 .scene{flex:1;position:relative;overflow:hidden;background:#D4C8A0;min-height:0}
 canvas{display:block;width:100%;height:100%}
-
-/* ── Connection Badge ── */
 .conn{position:absolute;top:6px;right:8px;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:bold;
   z-index:10;border:2px solid;transition:all .3s;backdrop-filter:blur(4px)}
 .conn.on{background:#DFF5D0e0;color:#228B22;border-color:#228B22}
 .conn.off{background:#FFD0D0e0;color:#CC0000;border-color:#CC0000}
-
-/* ── Signal bars ── */
+.conn.sse{background:#E8F0FFe0;color:#4466CC;border-color:#4466CC}
 .signal{display:inline-flex;gap:1px;align-items:flex-end;height:10px;margin-left:4px;vertical-align:middle}
 .signal i{width:3px;background:#228B22;border-radius:1px;transition:opacity .3s}
 .signal i:nth-child(1){height:3px}.signal i:nth-child(2){height:5px}.signal i:nth-child(3){height:7px}.signal i:nth-child(4){height:10px}
 .signal.weak i:nth-child(3),.signal.weak i:nth-child(4){opacity:.2}
 .signal.mid i:nth-child(4){opacity:.2}
-
-/* ── Toast ── */
 .toast-wrap{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:30;display:flex;flex-direction:column;gap:4px;
   pointer-events:none;width:90%;max-width:360px}
 .toast{padding:6px 12px;border-radius:8px;font-size:11px;font-weight:bold;text-align:center;
@@ -53,23 +58,6 @@ canvas{display:block;width:100%;height:100%}
 .toast.show{opacity:1}.toast.hide{opacity:0;transform:translateY(-10px)}
 .toast.ok{background:#228B22e0;color:#FFF}.toast.er{background:#CC0000e0;color:#FFF}.toast.in{background:#1A1A3Ae0;color:var(--gold)}
 @keyframes toastIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
-
-/* ── Floor Navigation ── */
-.floor-nav{display:flex;background:#2A2A4A;border-top:2px solid var(--gold-d);border-bottom:2px solid var(--gold-d);
-  padding:2px 6px;gap:4px;flex-shrink:0;z-index:15;justify-content:center;align-items:center}
-.floor-btn{padding:5px 14px;border:2px solid #444;border-radius:6px;background:#1A1A3A;
-  color:#888;font-size:11px;font-weight:bold;font-family:inherit;cursor:pointer;transition:all .2s;
-  position:relative;min-height:30px;display:flex;align-items:center;gap:3px}
-.floor-btn.active{background:var(--gold-dd);color:var(--gold);border-color:var(--gold-d)}
-.floor-btn:active{transform:scale(.95)}
-.floor-btn .fbadge{width:6px;height:6px;border-radius:50%;background:var(--err);display:none;
-  position:absolute;top:2px;right:2px}
-.floor-btn .fbadge.show{display:block;animation:pulse 1.5s infinite}
-.floor-btn.bldg{border-color:#555}
-.floor-btn.bldg.active{background:#4A3A20;border-color:var(--gold-d);color:var(--gold)}
-.floor-name{font-size:10px;color:#AAA;margin-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* ── Narration Bar ── */
 .narr{background:#FFF8E8;border-top:3px solid var(--gold-d);display:flex;align-items:center;
   padding:6px 12px;gap:8px;min-height:40px;flex-shrink:0}
 .narr .face{min-width:28px;height:24px;border-radius:4px;border:2px solid var(--gold-d);display:flex;
@@ -78,8 +66,6 @@ canvas{display:block;width:100%;height:100%}
 .narr .txt{flex:1;font-size:12px;color:var(--text);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .narr .cur{color:var(--gold-d);animation:blink .8s step-end infinite;font-size:10px}
 @keyframes blink{50%{opacity:0}}
-
-/* ── Bottom Nav ── */
 .bnav{display:flex;background:#1A1A3A;border-top:3px solid var(--gold-d);padding-bottom:var(--safe);flex-shrink:0;z-index:20}
 .bnav .nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   padding:8px 4px;border:none;background:none;font-family:inherit;color:#888;font-size:9px;cursor:pointer;
@@ -92,8 +78,6 @@ canvas{display:block;width:100%;height:100%}
   background:var(--err);color:#FFF;font-size:8px;font-weight:bold;border-radius:8px;
   display:none;align-items:center;justify-content:center;padding:0 3px}
 .bnav .nb .badge.show{display:flex}
-
-/* ── Panel Overlay ── */
 .panel-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:#00000080;z-index:50;
   opacity:0;pointer-events:none;transition:opacity .3s}
 .panel-overlay.open{opacity:1;pointer-events:auto}
@@ -113,36 +97,35 @@ canvas{display:block;width:100%;height:100%}
 .panel-body{flex:1;overflow-y:auto;padding:8px 10px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .panel-body::-webkit-scrollbar{width:4px}
 .panel-body::-webkit-scrollbar-thumb{background:#C8A882;border-radius:2px}
-
-/* ── Log Entries ── */
 .le{padding:6px 8px;margin-bottom:3px;border-radius:6px;border-left:4px solid #C8A882;background:#FFF8E8;line-height:1.4;transition:background .2s}
 .le.ok{border-color:var(--ok)}.le.er{border-color:var(--err)}.le.wr{border-color:var(--warn)}.le.in{border-color:var(--info)}
 .le .t{color:#8B7860;font-size:9px;margin-right:4px}
 .le .n{color:var(--accent);font-weight:bold;margin-right:4px;font-size:11px}
 .le .m{color:#4A3A2A;font-size:10px}
-
-/* ── Metric Bars ── */
 .sb{display:flex;align-items:center;gap:4px;margin-bottom:4px;min-height:22px}
 .sb .n{width:54px;text-align:right;color:var(--gold-dd);font-size:10px;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb .b{flex:1;height:14px;background:#444;border:1px solid #222;border-radius:3px;overflow:hidden;position:relative}
 .sb .f{height:100%;min-width:1px;border-radius:2px;transition:width .6s ease}
 .sb .v{width:32px;text-align:right;font-weight:bold;color:var(--err);font-size:10px}
 .sb .spark{position:absolute;right:2px;top:1px;height:12px;opacity:.4}
-
-/* ── Agent Cards ── */
-.ac{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;background:#FFF8E8;
-  border:2px solid #D4B896;border-radius:8px;transition:all .3s;min-height:52px}
-.ac.on{background:#FFE8C0;border-color:var(--accent);box-shadow:0 0 8px #CC660030}
-.ac .fc{width:36px;height:36px;border-radius:6px;border:2px solid var(--gold-d);display:flex;
-  align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all .3s}
+.ac{display:flex;gap:8px;padding:8px 10px;margin-bottom:5px;background:var(--kairo-panel);
+  border:2px solid var(--kairo-border);border-radius:8px;transition:all .3s;min-height:64px;position:relative}
+.ac.on{background:#FFF0D0;border-color:var(--warm-red);box-shadow:0 2px 8px #D4523C20}
+.ac .fc{width:40px;height:40px;border-radius:6px;border:2px solid var(--gold-d);display:flex;
+  align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all .3s;position:relative}
 .ac .i{flex:1;overflow:hidden}
-.ac .nm{font-weight:bold;font-size:12px;color:var(--gold-dd)}
-.ac .rl{font-size:9px;color:#8B7860;margin-left:4px}
+.ac .nm{font-weight:bold;font-size:12px;color:var(--rust)}
+.ac .rl{font-size:9px;color:var(--muted-teal);margin-left:4px}
 .ac .tk{font-size:11px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.pw{width:100%;height:6px;background:#444;margin-top:3px;overflow:hidden;border-radius:3px}
-.pw .pf{height:100%;border-radius:3px;transition:width .6s ease}
-
-/* ── Command Panel ── */
+.floor-nav{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:3px;z-index:15}
+.floor-btn{width:36px;height:30px;border:2px solid var(--gold-d);border-radius:6px;background:#1A1A3ACC;color:var(--gold);
+  font-size:11px;font-weight:bold;cursor:pointer;position:relative;transition:all .2s;backdrop-filter:blur(4px)}
+.floor-btn.active{background:var(--gold-d);color:#FFF;box-shadow:0 0 8px #FFD08060}
+.floor-btn:active{transform:scale(.92)}
+.fbadge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;
+  background:var(--warm-red);display:none;box-shadow:0 0 4px var(--warm-red)}
+.fbadge.show{display:block;animation:pulse 1.5s infinite}
+.floor-label{font-size:8px;color:var(--gold);text-align:center;margin-top:2px;text-shadow:0 1px 2px #000;max-width:40px;word-break:keep-all}
 .cmd-area{padding:4px 0}
 .cmd-row{display:flex;gap:6px;margin-bottom:6px}
 .cmd-row input{flex:1;padding:10px 12px;background:#FFF8E8;color:var(--text);border:2px solid #C8A882;
@@ -162,8 +145,6 @@ canvas{display:block;width:100%;height:100%}
 .cmd-entry .ct{color:var(--accent);font-weight:bold}
 .cmd-entry .cs{font-size:9px;margin-left:4px}
 .cmd-entry .cs.queued{color:var(--ok)}.cmd-entry .cs.rejected{color:var(--err)}.cmd-entry .cs.pending{color:var(--warn)}.cmd-entry .cs.executing{color:var(--accent);animation:pulse 1s infinite}
-
-/* ── FAB ── */
 .fab{position:fixed;bottom:calc(60px + var(--safe));right:12px;width:52px;height:52px;border-radius:50%;
   background:linear-gradient(135deg,#FFE0A0,#FFC860);border:3px solid var(--gold-d);
   box-shadow:0 4px 12px #00000040,2px 2px 0 var(--gold-dd);color:var(--gold-dd);font-size:22px;
@@ -171,8 +152,6 @@ canvas{display:block;width:100%;height:100%}
   transition:all .2s;-webkit-tap-highlight-color:transparent}
 .fab:active{transform:scale(.9)}
 .fab.hide{transform:scale(0);opacity:0;pointer-events:none}
-
-/* ── Setup Overlay ── */
 .setup-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:#1A1A3Af0;z-index:200;
   display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
 .setup-box{background:var(--panel);border:3px solid var(--gold-d);border-radius:12px;
@@ -188,24 +167,117 @@ canvas{display:block;width:100%;height:100%}
   font-weight:bold;cursor:pointer;box-shadow:2px 2px 0 var(--gold-dd);min-height:48px}
 .setup-box button:active{transform:translateY(2px);box-shadow:none}
 .setup-box .hint{font-size:9px;color:#8B7860;margin-top:10px;text-align:center}
-
-/* ── Skeleton ── */
 .skel{background:linear-gradient(90deg,#E8D8C0 25%,#F0E8D4 50%,#E8D8C0 75%);background-size:200%;
   animation:shimmer 1.5s infinite;border-radius:4px}
 @keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
-
-/* ── Desktop ── */
 @media(min-width:768px){
   .fab{bottom:calc(60px + var(--safe));right:24px;width:56px;height:56px;font-size:24px}
   .panel-sheet{max-width:600px;margin:0 auto;left:50%;right:auto;transform:translateX(-50%) translateY(100%);width:100%}
   .panel-overlay.open .panel-sheet{transform:translateX(-50%) translateY(0)}
 }
-/* ── Landscape ── */
 @media(max-height:400px) and (orientation:landscape){
   .narr{display:none}
-  .floor-nav{padding:1px 4px}
-  .floor-btn{padding:3px 10px;min-height:24px;font-size:10px}
   .bnav .nb{padding:4px;min-height:40px}
   .bnav .nb .ico{font-size:16px}
   .bnav .nb span:last-child{display:none}
 }
+</style>
+</head>
+<body>
+<!-- Setup Overlay -->
+<div class="setup-overlay" id="setupOverlay">
+  <div class="setup-box">
+    <h2>에이전트 개발국 ++ Remote</h2>
+    <label>Supabase URL</label>
+    <input id="cfgUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
+    <label>Anon Key</label>
+    <input id="cfgKey" placeholder="eyJhbGci..." autocomplete="off">
+    <label>Session ID</label>
+    <input id="cfgSession" placeholder="relay 시작 시 표시된 Session ID">
+    <button onclick="doConnect()">접속</button>
+    <div class="hint">설정은 localStorage에 저장됩니다. URL 파라미터로도 전달 가능.</div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div class="app" id="mainApp" style="display:none">
+<!-- Top Bar -->
+<div class="top">
+  <div class="live off" id="lv"></div>
+  <div class="logo">개발국 <span class="sub">Remote</span></div>
+  <div class="stats">
+    <div class="stat"><b id="sT">0</b>작업</div>
+    <div class="stat"><b id="sA">0</b><span class="delta" id="sAd"></span>승인</div>
+    <div class="stat"><b id="sD">0</b>차단</div>
+    <div class="stat"><b id="sO">-</b>ops/m</div>
+  </div>
+</div>
+
+<!-- Scene -->
+<div class="scene">
+  <canvas id="c"></canvas>
+  <div class="conn off" id="cs">연결 대기<span class="signal" id="sig"><i></i><i></i><i></i><i></i></span></div>
+  <div class="toast-wrap" id="toastWrap"></div>
+  <!-- Floor Navigation -->
+  <div class="floor-nav" id="floorNav">
+    <button class="floor-btn active" data-f="0" onclick="switchFloor(0)">1F<span class="fbadge" id="fb0"></span></button>
+    <button class="floor-btn" data-f="1" onclick="switchFloor(1)">2F<span class="fbadge" id="fb1"></span></button>
+    <button class="floor-btn" data-f="2" onclick="switchFloor(2)">3F<span class="fbadge" id="fb2"></span></button>
+    <button class="floor-btn" data-f="b" onclick="toggleBuildingView()">&#127970;</button>
+    <div class="floor-label" id="floorName">1F 실행 계층</div>
+  </div>
+</div>
+
+<!-- Narration -->
+<div class="narr">
+  <div class="face" id="nf">SYS</div>
+  <div class="txt" id="nt">에이전트 개발국 Remote에 오신 것을 환영합니다!</div>
+  <div class="cur">&#9660;</div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bnav">
+  <button class="nb active" data-p="log" onclick="openPanel('log')">
+    <span class="ico">&#128220;</span><span>로그</span><span class="badge" id="logBadge">0</span>
+  </button>
+  <button class="nb" data-p="metrics" onclick="openPanel('metrics')">
+    <span class="ico">&#128202;</span><span>메트릭</span>
+  </button>
+  <button class="nb" data-p="agents" onclick="openPanel('agents')">
+    <span class="ico">&#128101;</span><span>직원</span>
+  </button>
+  <button class="nb" data-p="cmd" onclick="openPanel('cmd')">
+    <span class="ico">&#128172;</span><span>명령</span><span class="badge" id="cmdBadge">0</span>
+  </button>
+  <button class="nb" data-p="mcp" onclick="openPanel('mcp')">
+    <span class="ico">&#128268;</span><span>MCP</span>
+  </button>
+</nav>
+</div>
+
+<!-- FAB -->
+<button class="fab" id="fabBtn" onclick="openPanel('cmd')">&#128172;</button>
+
+<!-- Panel Bottom Sheet -->
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel(event)">
+  <div class="panel-sheet" id="panelSheet">
+    <div class="panel-handle"></div>
+    <div class="panel-tabs">
+      <button class="ptab active" data-p="log" onclick="switchTab('log')">&#128220; 활동 로그 <span id="lc" style="color:var(--accent)">0</span></button>
+      <button class="ptab" data-p="metrics" onclick="switchTab('metrics')">&#128202; 메트릭스 <span id="mc"></span></button>
+      <button class="ptab" data-p="agents" onclick="switchTab('agents')">&#128101; 직원 8</button>
+      <button class="ptab" data-p="cmd" onclick="switchTab('cmd')">&#128172; 명령 <span id="cmdCount">0</span></button>
+      <button class="ptab" data-p="mcp" onclick="switchTab('mcp')">&#128268; MCP/스킬</button>
+    </div>
+    <div class="panel-body" id="panelBody">
+      <div class="skel" style="height:20px;margin-bottom:6px"></div>
+      <div class="skel" style="height:20px;margin-bottom:6px;width:80%"></div>
+      <div class="skel" style="height:20px;width:60%"></div>
+    </div>
+  </div>
+</div>
+
+<script>window.onerror=function(msg,src,line){console.error('JS Error:',msg,'line:',line)}</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
