@@ -15,7 +15,7 @@ export async function initPixi(){
     await S.pixiApp.init({resizeTo:container,background:0xD4C8A0,antialias:false,
       resolution:Math.min(window.devicePixelRatio||1,2),autoDensity:true,
       preference:'webgl',powerPreference:'high-performance'});
-    PIXI.TextureStyle.defaultOptions.scaleMode='nearest';
+    PIXI.TextureStyle.defaultOptions.scaleMode='linear';
     const old=container.querySelector('canvas');if(old)old.remove();
     S.pixiApp.canvas.style.cssText='display:block;width:100%;height:100%';
     container.appendChild(S.pixiApp.canvas);
@@ -24,19 +24,20 @@ export async function initPixi(){
     });
     S.bgSprite=new PIXI.Sprite();S.L.bg.addChild(S.bgSprite);
     S.L.agents.sortableChildren=true;
+    S.dpr=Math.min(window.devicePixelRatio||1,2);
     for(let i=0;i<8;i++){
-      const ac=document.createElement('canvas');ac.width=80;ac.height=120;S.agentCanvases.push(ac);
+      const ac=document.createElement('canvas');ac.width=80*S.dpr;ac.height=120*S.dpr;S.agentCanvases.push(ac);
       const sp=new PIXI.Sprite();sp.anchor.set(0.5,0.5);S.agentSprites.push(sp);S.L.agents.addChild(sp);
     }
     for(let i=0;i<8;i++){
-      const dc=document.createElement('canvas');dc.width=50;dc.height=50;S.deskCanvases.push(dc);
+      const dc=document.createElement('canvas');dc.width=50*S.dpr;dc.height=50*S.dpr;S.deskCanvases.push(dc);
       const sp=new PIXI.Sprite();sp.visible=false;S.deskSprites.push(sp);S.L.desks.addChild(sp);
     }
-    S.hudCanvas=document.createElement('canvas');S.hudCanvas.width=240;S.hudCanvas.height=80;
-    S.hudCx=S.hudCanvas.getContext('2d');
+    S.hudCanvas=document.createElement('canvas');S.hudCanvas.width=240*S.dpr;S.hudCanvas.height=80*S.dpr;
+    S.hudCx=S.hudCanvas.getContext('2d');S.hudCx.setTransform(S.dpr,0,0,S.dpr,0,0);
     S.hudSprite=new PIXI.Sprite();S.L.hud.addChild(S.hudSprite);
-    S.buf=document.createElement('canvas');S.buf.width=80;S.buf.height=120;
-    S.cx=S.buf.getContext('2d');S.dpr=1;
+    S.buf=document.createElement('canvas');S.buf.width=80*S.dpr;S.buf.height=120*S.dpr;
+    S.cx=S.buf.getContext('2d');S.cx.setTransform(S.dpr,0,0,S.dpr,0,0);
     S.pixiApp.ticker.maxFPS=30;S.pixiReady=true;
     console.log('PixiJS v8 initialized',S.pixiApp.screen.width+'x'+S.pixiApp.screen.height);
   }catch(e){console.error('PixiJS init failed:',e);initCanvasFallback()}
@@ -175,7 +176,7 @@ function drawWorkerBadge(px,py,ag,s){
 
 function drawNameTag(px,y,c){
   const cx=S.cx;const nm=c.l;
-  cx.font='bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';cx.textAlign='center';
+  cx.font='bold 12px -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif';cx.textAlign='center';
   const nw=cx.measureText(nm).width+14,tx=px-nw/2,ty=y,th=16,r3=4;
   cx.fillStyle='#00000018';cx.beginPath();
   cx.moveTo(tx+r3+1,ty+1);cx.lineTo(tx+nw-r3+1,ty+1);cx.arc(tx+nw-r3+1,ty+r3+1,r3,-Math.PI/2,0);
@@ -223,7 +224,7 @@ function drawBub(x,y,t){
   const line1=slashIdx>0&&slashIdx<12?full.slice(0,slashIdx):'';
   const line2=line1?full.slice(slashIdx+1).trim():full;
   const twoLine=!!line1;
-  cx.font='bold 10px monospace';
+  cx.font='bold 11px monospace';
   const tw=cx.measureText(line2).width;
   const w=Math.max(tw+16,50),h=twoLine?30:22,bx2=x-w/2,by=y-h,r=5;
   cx.fillStyle='#1A1A0A30';cx.fillRect(bx2+1,by+1,w,h);
@@ -237,7 +238,7 @@ function drawBub(x,y,t){
   cx.fillStyle='#FFF6E8';cx.beginPath();cx.moveTo(x-3,y);cx.lineTo(x+3,y);cx.lineTo(x,y+4);cx.fill();
   cx.strokeStyle='#C4A06A';cx.lineWidth=1;cx.beginPath();cx.moveTo(x-3,y);cx.lineTo(x,y+4);cx.lineTo(x+3,y);cx.stroke();
   cx.textAlign='center';cx.textBaseline='middle';
-  if(twoLine){cx.fillStyle='#AAAAAA';cx.font='bold 8px sans-serif';cx.fillText(line1,x,by+9);cx.fillStyle='#8B6F47';cx.font='bold 10px monospace';cx.fillText(line2.slice(0,28),x,by+21);}
+  if(twoLine){cx.fillStyle='#999999';cx.font='bold 9px sans-serif';cx.fillText(line1,x,by+10);cx.fillStyle='#5A4020';cx.font='bold 11px monospace';cx.fillText(line2.slice(0,28),x,by+22);}
   else{cx.fillStyle='#8B6F47';cx.fillText(full,x,y-h/2);}
   cx.textBaseline='alphabetic';
 }

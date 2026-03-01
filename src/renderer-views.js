@@ -59,8 +59,10 @@ function drawHUD(w, h) {
   let hx;
   if (S.pixiReady) {
     if (!S.hudCanvas || !S.hudCx) return;
-    S.hudCanvas.width = Math.min(250, w); S.hudCanvas.height = 110;
-    S.hudCx.clearRect(0, 0, S.hudCanvas.width, S.hudCanvas.height);
+    const hudLogW = Math.min(250, w), hudLogH = 110;
+    S.hudCanvas.width = hudLogW * S.dpr; S.hudCanvas.height = hudLogH * S.dpr;
+    S.hudCx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    S.hudCx.clearRect(0, 0, hudLogW, hudLogH);
     hx = S.hudCx;
   } else { hx = S.cx; }
   let ac = 0; agents.forEach(a => { if (a.st === 'work') ac++; });
@@ -80,9 +82,9 @@ function drawHUD(w, h) {
 
   // Online indicator + time
   hx.fillStyle = S.agentOnline ? '#44CC44' : '#CC0000'; hx.fillRect(8, 8, 6, 6);
-  hx.fillStyle = '#FFF'; hx.font = '7px monospace'; hx.textAlign = 'left'; hx.fillText(S.agentOnline ? 'ON' : 'OFF', 16, 13);
+  hx.fillStyle = '#FFF'; hx.font = '8px monospace'; hx.textAlign = 'left'; hx.fillText(S.agentOnline ? 'ON' : 'OFF', 16, 13);
   const sess = getSessionLabel();
-  hx.font = 'bold 8px monospace'; hx.textAlign = 'right'; hx.fillStyle = '#88BBDD'; hx.fillText(sess.label, hudW2 - 4, 14);
+  hx.font = 'bold 9px monospace'; hx.textAlign = 'right'; hx.fillStyle = '#88BBDD'; hx.fillText(sess.label, hudW2 - 4, 14);
 
   // Active agents + ops/min
   hx.textAlign = 'left'; hx.font = 'bold 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
@@ -110,7 +112,7 @@ function drawHUD(w, h) {
   else if (intensity > .3) { aiG.addColorStop(0, '#FFAA22'); aiG.addColorStop(1, '#FFDD44'); }
   else { aiG.addColorStop(0, '#44AA44'); aiG.addColorStop(1, '#66CC66'); }
   hx.fillStyle = aiG; hx.fillRect(xpX, aiY, aiW * intensity, aiH);
-  hx.fillStyle = '#888'; hx.font = '7px monospace'; hx.fillText(S.activityHistory.length + 'ops', aiW + 8, aiY + 3);
+  hx.fillStyle = '#888'; hx.font = '8px monospace'; hx.fillText(S.activityHistory.length + 'ops', aiW + 8, aiY + 3);
 
   // Mini sparkline
   const slY = aiY + 6, slH = 12, slW = aiW;
@@ -124,13 +126,13 @@ function drawHUD(w, h) {
   // Pipeline stats line
   let extraY = slY + slH + 3;
   const ps = S.pipelineStatus;
-  hx.fillStyle = '#888'; hx.font = 'bold 7px monospace'; hx.textAlign = 'left';
+  hx.fillStyle = '#888'; hx.font = 'bold 8px monospace'; hx.textAlign = 'left';
   hx.fillText('ERR:' + errs + '  DENY:' + ps.denies + '  TOOLS:' + total, xpX, extraY + 5); extraY += 9;
 
   // Current tool
   if (ps.lastTool) {
     const lastCmd = S.toolStats[ps.lastTool]?.lastCmd || '';
-    hx.fillStyle = '#44DD66'; hx.font = 'bold 7px monospace';
+    hx.fillStyle = '#44DD66'; hx.font = 'bold 8px monospace';
     hx.fillText('\u25B6 ' + ps.lastTool + ': ' + lastCmd.slice(0, 28), xpX, extraY + 5); extraY += 9;
   }
 
@@ -141,12 +143,13 @@ function drawHUD(w, h) {
     const oPct = Math.min(oDone / oTotal, 1);
     const oG = hx.createLinearGradient(xpX, 0, xpX + oW2 * oPct, 0); oG.addColorStop(0, '#CC6600'); oG.addColorStop(1, '#FFAA44');
     hx.fillStyle = oG; hx.fillRect(xpX, extraY, oW2 * oPct, oH2);
-    hx.fillStyle = '#FFD080'; hx.font = 'bold 7px monospace'; hx.fillText('DAG ' + oDone + '/' + oTotal, xpX + oW2 + 4, extraY + 4);
+    hx.fillStyle = '#FFD080'; hx.font = 'bold 8px monospace'; hx.fillText('DAG ' + oDone + '/' + oTotal, xpX + oW2 + 4, extraY + 4);
   }
 
   if (S.pixiReady && S.hudSprite) {
     if (S.hudSprite._tex) S.hudSprite._tex.destroy(true);
     S.hudSprite._tex = PIXI.Texture.from(S.hudCanvas); S.hudSprite.texture = S.hudSprite._tex; S.hudSprite.x = 0; S.hudSprite.y = 0;
+    S.hudSprite.scale.set(1 / S.dpr);
   }
 }
 
@@ -246,9 +249,9 @@ function gameLoop() {
     agents.forEach(a => { if (S.agentSprites[a.i]) S.agentSprites[a.i].visible = false; });
   } else {
     const fy = h * .55;
-    DESKS.forEach((d, i) => { const onFloor = d.floor === S.currentFloor; if (d.act && S.deskSprites[i] && onFloor) { const dc = S.deskCanvases[i], s = S.P, sx2 = 6.4 * s, sy2 = 5.8 * s; dc.width = Math.ceil(sx2); dc.height = Math.ceil(sy2); const prevBuf = S.buf, prevCx = S.cx; S.buf = dc; S.cx = dc.getContext('2d'); const dsx = d.x * w, sxOff = -dsx + 3.2 * s, syOff = -(fy + 2) + 7.5 * s; S.cx.save(); S.cx.translate(sxOff, syOff); drawActiveScreen(dsx, fy, AT[i]); S.cx.restore(); S.buf = prevBuf; S.cx = prevCx; if (S.deskSprites[i]._tex) S.deskSprites[i]._tex.destroy(true); S.deskSprites[i]._tex = PIXI.Texture.from(dc); S.deskSprites[i].texture = S.deskSprites[i]._tex; S.deskSprites[i].x = d.x * w - 3.2 * s; S.deskSprites[i].y = fy + 2 - 7.5 * s; S.deskSprites[i].visible = true; S.deskSprites[i].alpha = S.floorTransition ? S.floorTransition.eased : 1; } else if (S.deskSprites[i]) { S.deskSprites[i].visible = false; } });
+    DESKS.forEach((d, i) => { const onFloor = d.floor === S.currentFloor; if (d.act && S.deskSprites[i] && onFloor) { const dc = S.deskCanvases[i], s = S.P, sx2 = 6.4 * s, sy2 = 5.8 * s; dc.width = Math.ceil(sx2 * S.dpr); dc.height = Math.ceil(sy2 * S.dpr); const prevBuf = S.buf, prevCx = S.cx; S.buf = dc; S.cx = dc.getContext('2d'); S.cx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); const dsx = d.x * w, sxOff = -dsx + 3.2 * s, syOff = -(fy + 2) + 7.5 * s; S.cx.save(); S.cx.translate(sxOff, syOff); drawActiveScreen(dsx, fy, AT[i]); S.cx.restore(); S.buf = prevBuf; S.cx = prevCx; if (S.deskSprites[i]._tex) S.deskSprites[i]._tex.destroy(true); S.deskSprites[i]._tex = PIXI.Texture.from(dc); S.deskSprites[i].texture = S.deskSprites[i]._tex; S.deskSprites[i].x = d.x * w - 3.2 * s; S.deskSprites[i].y = fy + 2 - 7.5 * s; S.deskSprites[i].visible = true; S.deskSprites[i].alpha = S.floorTransition ? S.floorTransition.eased : 1; S.deskSprites[i].scale.set(1 / S.dpr); } else if (S.deskSprites[i]) { S.deskSprites[i].visible = false; } });
     agents.forEach(a => a.up()); agents.sort((a, b) => a.y - b.y); updateFloorBadges();
-    agents.forEach((a) => { const onFloor = a.floor === S.currentFloor, ac = S.agentCanvases[a.i]; if (!ac) return; const sp = S.agentSprites[a.i]; if (!onFloor) { if (sp) sp.visible = false; return; } const aw = 80, ah = 120; ac.width = aw; ac.height = ah; const prevBuf = S.buf, prevCx = S.cx, prevDpr = S.dpr; S.buf = ac; S.cx = ac.getContext('2d'); S.dpr = 1; S.cx.clearRect(0, 0, aw, ah); drawCh(aw / 2, ah * .65, a.t, a.wf, a.d, a.st === 'work', a.st === 'work' ? a.tk : '', a); S.buf = prevBuf; S.cx = prevCx; S.dpr = prevDpr; if (sp) { if (sp._tex) sp._tex.destroy(true); sp._tex = PIXI.Texture.from(ac); sp.texture = sp._tex; sp.x = a.x * w; sp.y = a.y * h; sp.zIndex = Math.floor(a.y * 1000); sp.visible = true; sp.alpha = S.floorTransition ? S.floorTransition.eased : 1; } });
+    agents.forEach((a) => { const onFloor = a.floor === S.currentFloor, ac = S.agentCanvases[a.i]; if (!ac) return; const sp = S.agentSprites[a.i]; if (!onFloor) { if (sp) sp.visible = false; return; } const aw = 80, ah = 120; ac.width = aw * S.dpr; ac.height = ah * S.dpr; const prevBuf = S.buf, prevCx = S.cx; S.buf = ac; S.cx = ac.getContext('2d'); S.cx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); S.cx.clearRect(0, 0, aw, ah); drawCh(aw / 2, ah * .65, a.t, a.wf, a.d, a.st === 'work', a.st === 'work' ? a.tk : '', a); S.buf = prevBuf; S.cx = prevCx; if (sp) { if (sp._tex) sp._tex.destroy(true); sp._tex = PIXI.Texture.from(ac); sp.texture = sp._tex; sp.x = a.x * w; sp.y = a.y * h; sp.zIndex = Math.floor(a.y * 1000); sp.visible = true; sp.alpha = S.floorTransition ? S.floorTransition.eased : 1; sp.scale.set(1 / S.dpr); } });
   }
   drawPts(); updateFloatingTexts(); drawHUD(w, h); S.fr++;
 }
