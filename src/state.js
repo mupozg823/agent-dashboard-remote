@@ -17,7 +17,7 @@ export const S = {
   P: window.innerWidth <= 600 ? 3 : 5,
   // Data
   entries: [], fr: 0, connected: false, lastET: 0,
-  serverMetrics: null, timeline: [], prevTotal: 0,
+  serverMetrics: null, prevTotal: 0,
   // PixiJS / Canvas
   pixiApp: null, pixiReady: false,
   buf: null, cx: null, bg: null, bgW: 0, bgH: 0, dpr: 1,
@@ -25,17 +25,15 @@ export const S = {
   bgSprite: null, agentSprites: [], deskSprites: [],
   hudCanvas: null, hudCx: null, hudSprite: null,
   agentCanvases: [], deskCanvases: [],
-  texCache: new Map(), TEX_CACHE_MAX: 400,
   pixiPtexCache: new Map(),
   // Session
-  sessionStart: Date.now(), currentSeason: '',
+  sessionStart: Date.now(),
   // Pipeline status
   pipelineStatus: { approves: 0, denies: 0, lastTool: null, lastToolTime: 0 },
   // Tool stats (per-tool: { calls, errors, lastCmd })
   toolStats: {},
   // Floors
   currentFloor: 0, viewMode: 'floor',
-  floorBgCache: [null, null, null],
   floorTransition: null,
   elevatorPackets: [],
   buildingFloorHits: [],
@@ -44,7 +42,6 @@ export const S = {
   lastTick: 0, relayUptime: 0, lastLaneStats: null, lastLaneStatsTime: 0,
   // Particles
   pts: [], floatingTexts: [], weatherParticles: [],
-  thunderFlash: 0,
   // Shake
   shakeFrames: 0, shakeIntensity: 0,
   // Render
@@ -55,7 +52,6 @@ export const S = {
   sparkData: { ops: [], errs: [], lat: [] },
   heatmap: Array.from({ length: 7 }, () => new Float32Array(24)),
   groupStats: {},
-  skillUsage: {},
   // Activity
   activityHistory: [], lastActivityPush: 0, lastToolStart: 0,
   // UI

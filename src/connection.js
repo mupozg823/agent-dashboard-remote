@@ -207,10 +207,11 @@ function ingestAuditEntry(entry) {
 export function onE(e) {
   // Cap entries to prevent unbounded growth
   if (S.entries.length > 2000) {
-    // Recalculate error count after trimming
-    const trimmed = S.entries.length - 1500;
-    S.entries = S.entries.slice(-1500);
-    S._localErrors = Math.max(0, (S._localErrors || 0) - trimmed);
+    // Count actual errors in the portion being trimmed
+    const keep = S.entries.slice(-1500);
+    const trimmedErrors = S.entries.slice(0, S.entries.length - 1500).reduce((n, e) => n + (e.err || e.decision === 'deny' ? 1 : 0), 0);
+    S.entries = keep;
+    S._localErrors = Math.max(0, (S._localErrors || 0) - trimmedErrors);
   }
   if (e.err || e.decision === 'deny') S._localErrors = (S._localErrors || 0) + 1;
   trackActivity(); trackToolCall(e); trackMcp(e); recordHeat(e.ts);
@@ -218,7 +219,6 @@ export function onE(e) {
   if (!S.groupStats[grp]) S.groupStats[grp] = { total: 0, errors: 0 };
   S.groupStats[grp].total++;
   if (e.err || e.level === 'error') S.groupStats[grp].errors++;
-  if (e.tool === 'Skill' && e.summary) { const sm = e.summary.match(/\/[\w-]+/); if (sm) S.skillUsage[sm[0]] = (S.skillUsage[sm[0]] || 0) + 1; }
   if (e.ts && S.lastToolStart > 0) { const lat = new Date(e.ts).getTime() - S.lastToolStart; if (lat > 0 && lat < 60000) addSpark('lat', lat); }
   S.lastToolStart = e.ts ? new Date(e.ts).getTime() : Date.now();
   const ai = t2a(e.tool), ag = S.agents.find(a => a.i === ai);

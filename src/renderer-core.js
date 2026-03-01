@@ -120,24 +120,23 @@ export function drawCh(px,py,type,wf,dir,work,bub,ag){
   cx.fillRect(px-4.5*s,y+2.5*s+armL,1.5*s,3.5*s);cx.fillRect(px+3*s,y+2.5*s+armR,1.5*s,3.5*s);
   cx.fillStyle=SK;
   cx.fillRect(px-4.5*s,y+5.5*s+armL,1.5*s,1.2*s);cx.fillRect(px+3*s,y+5.5*s+armR,1.5*s,1.2*s);
-  let headOff=0;
-  cx.fillStyle=OL;cx.fillRect(px-5*s-1+headOff,y-5*s-1,10*s+2,7*s+2);
-  cx.fillStyle=SK;cx.fillRect(px-5*s+headOff,y-5*s,10*s,7*s);
-  cx.fillStyle='#FFAA8840';cx.fillRect(px-4.5*s+headOff,y-.5*s,2*s,1.5*s);cx.fillRect(px+2.5*s+headOff,y-.5*s,2*s,1.5*s);
-  cx.fillStyle=OL;cx.fillRect(px-5.5*s-1+headOff,y-6.5*s-1,11*s+2,3.5*s+2);
-  cx.fillStyle=c.h;cx.fillRect(px-5.5*s+headOff,y-6.5*s,11*s,3.5*s);
-  cx.fillRect(px-5.5*s+headOff,y-3.5*s,2*s,2.5*s);cx.fillRect(px+3.5*s+headOff,y-3.5*s,2*s,2.5*s);
+  cx.fillStyle=OL;cx.fillRect(px-5*s-1,y-5*s-1,10*s+2,7*s+2);
+  cx.fillStyle=SK;cx.fillRect(px-5*s,y-5*s,10*s,7*s);
+  cx.fillStyle='#FFAA8840';cx.fillRect(px-4.5*s,y-.5*s,2*s,1.5*s);cx.fillRect(px+2.5*s,y-.5*s,2*s,1.5*s);
+  cx.fillStyle=OL;cx.fillRect(px-5.5*s-1,y-6.5*s-1,11*s+2,3.5*s+2);
+  cx.fillStyle=c.h;cx.fillRect(px-5.5*s,y-6.5*s,11*s,3.5*s);
+  cx.fillRect(px-5.5*s,y-3.5*s,2*s,2.5*s);cx.fillRect(px+3.5*s,y-3.5*s,2*s,2.5*s);
   const blk=fr%180>=176;
   if(!blk){
     const ex=dir>0?s*.3:dir<0?-s*.3:0;
-    cx.fillStyle='#FFF';cx.fillRect(px-3.5*s+headOff,y-3*s,3*s,2.5*s);cx.fillRect(px+.5*s+headOff,y-3*s,3*s,2.5*s);
-    cx.fillStyle='#222';cx.fillRect(px-2.5*s+ex+headOff,y-2.5*s,1.8*s,1.8*s);cx.fillRect(px+1.2*s+ex+headOff,y-2.5*s,1.8*s,1.8*s);
-    cx.fillStyle='#FFF';cx.fillRect(px-2.2*s+ex+headOff,y-2.5*s,s*.6,s*.6);cx.fillRect(px+1.5*s+ex+headOff,y-2.5*s,s*.6,s*.6);
-  }else{cx.fillStyle='#222';cx.fillRect(px-3*s+headOff,y-1.8*s,2.5*s,s*.4);cx.fillRect(px+.5*s+headOff,y-1.8*s,2.5*s,s*.4)}
+    cx.fillStyle='#FFF';cx.fillRect(px-3.5*s,y-3*s,3*s,2.5*s);cx.fillRect(px+.5*s,y-3*s,3*s,2.5*s);
+    cx.fillStyle='#222';cx.fillRect(px-2.5*s+ex,y-2.5*s,1.8*s,1.8*s);cx.fillRect(px+1.2*s+ex,y-2.5*s,1.8*s,1.8*s);
+    cx.fillStyle='#FFF';cx.fillRect(px-2.2*s+ex,y-2.5*s,s*.6,s*.6);cx.fillRect(px+1.5*s+ex,y-2.5*s,s*.6,s*.6);
+  }else{cx.fillStyle='#222';cx.fillRect(px-3*s,y-1.8*s,2.5*s,s*.4);cx.fillRect(px+.5*s,y-1.8*s,2.5*s,s*.4)}
   cx.fillStyle='#CC6644';
-  if(walk){cx.fillRect(px-.3*s+headOff,y+.5*s,s*.6,s*.4)}
-  else{cx.fillRect(px-.5*s+headOff,y+.5*s,s,s*.4)}
-  drawAccessory(px+headOff,y,type,s,false);
+  if(walk){cx.fillRect(px-.3*s,y+.5*s,s*.6,s*.4)}
+  else{cx.fillRect(px-.5*s,y+.5*s,s,s*.4)}
+  drawAccessory(px,y,type,s,false);
   if(flip)cx.restore();
   if(idle){drawStatusIcon(px+6*s,y-7*s,'idle')}
   drawWorkerBadge(px,y-9*s,ag,s);

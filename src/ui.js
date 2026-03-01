@@ -3,7 +3,7 @@ import {
   S, C, FLOORS, AT, DESKS, GROUPS,
   NR, MCP_SERVERS, SKILL_CATEGORIES, WORKER_ROLES,
 } from './state.js';
-import { tk, desc, esc, pick, getSessionLabel, getActivityIntensity } from './utils.js';
+import { tk, desc, esc, pick, getSessionLabel, getActivityIntensity, toolGroup } from './utils.js';
 import { getToolSummary } from './game-systems.js';
 
 // ══════════════════════════════════════════════════════
@@ -141,11 +141,8 @@ export function rStatHTML() {
   } else {
     d.forEach(e => {
       if (!e.tool) return;
-      if ('Read Write Edit NotebookEdit'.includes(e.tool)) grp['file-io']++;
-      else if (e.tool === 'Bash') grp.shell++;
-      else if (e.tool === 'Grep' || e.tool === 'Glob') grp.search++;
-      else if (e.tool.startsWith('mcp__') || e.tool === 'WebSearch' || e.tool === 'WebFetch') grp.external++;
-      else if ('Task Skill TaskCreate TaskUpdate'.includes(e.tool)) grp.agent++;
+      const g = toolGroup(e.tool);
+      if (grp[g] !== undefined) grp[g]++;
       if (e.ok === false) errs++; if (e.decision === 'deny') blocks++;
     });
     successRate = total > 0 ? ((total - errs) / total * 100) | 0 : 100;
@@ -250,7 +247,7 @@ export function rCmdHTML() {
   h += '</div>';
   h += '<div id="cmdHist" class="cmd-hist">';
   h += S.cmdHistory.slice(0, 30).map(c => {
-    const stCls = c.status === 'completed' ? 'queued' : c.status === 'queued' ? 'queued' : c.status === 'executing' ? 'executing' : c.status === 'rejected' || c.status === 'failed' ? 'rejected' : 'pending';
+    const stCls = c.status === 'completed' ? 'completed' : c.status === 'queued' ? 'queued' : c.status === 'executing' ? 'executing' : c.status === 'rejected' || c.status === 'failed' ? 'rejected' : 'pending';
     const statusIcon = c.status === 'executing' ? '\u2699\ufe0f ' : c.status === 'completed' ? '\u2705 ' : c.status === 'failed' ? '\u274c ' : c.status === 'queued' ? '\ud83d\udccb ' : '\u23f3 ';
     return `<div class="cmd-entry"><span class="ct">${statusIcon}${esc(c.command)}</span><span class="cs ${stCls}">${c.status}${c.reason ? ' : ' + esc(c.reason) : ''}</span><br><span style="color:#8B7860;font-size:9px">${c.ts.toLocaleTimeString('ko-KR')}</span>${c.result ? '<div style="margin-top:3px;padding:4px 6px;background:var(--panel);border:1px solid #D4B896;border-radius:4px;font-size:10px;max-height:80px;overflow:auto;white-space:pre-wrap">' + esc(String(c.result)) + '</div>' : ''}</div>`;
   }).join('');
@@ -427,7 +424,7 @@ export function renderCmdHist() {
   const el = document.getElementById('cmdHist');
   if (!el) return;
   el.innerHTML = S.cmdHistory.slice(0, 30).map(c => {
-    const stCls = c.status === 'completed' ? 'queued' : c.status === 'queued' ? 'queued' : c.status === 'executing' ? 'executing' : c.status === 'rejected' || c.status === 'failed' ? 'rejected' : 'pending';
+    const stCls = c.status === 'completed' ? 'completed' : c.status === 'queued' ? 'queued' : c.status === 'executing' ? 'executing' : c.status === 'rejected' || c.status === 'failed' ? 'rejected' : 'pending';
     const statusIcon = c.status === 'executing' ? '\u2699\ufe0f ' : c.status === 'completed' ? '\u2705 ' : c.status === 'failed' ? '\u274c ' : c.status === 'queued' ? '\ud83d\udccb ' : '\u23f3 ';
     return `<div class="cmd-entry"><span class="ct">${statusIcon}${esc(c.command)}</span><span class="cs ${stCls}">${c.status}${c.reason ? ' : ' + esc(c.reason) : ''}</span><br><span style="color:#8B7860;font-size:9px">${c.ts.toLocaleTimeString('ko-KR')}</span>${c.result ? '<div style="margin-top:2px;padding:2px 4px;background:#FFF0D0;border:1px solid #D4B896;border-radius:2px;font-size:9px;max-height:60px;overflow:auto;white-space:pre-wrap">' + esc(String(c.result)) + '</div>' : ''}</div>`;
   }).join('');

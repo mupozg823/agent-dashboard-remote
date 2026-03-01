@@ -70,9 +70,9 @@ export function toolGroup(t) {
   if (t === 'Bash') return 'shell';
   if (['Read', 'Write', 'Glob'].includes(t)) return 'file-io';
   if (['Edit', 'NotebookEdit'].includes(t)) return 'edit';
-  if (['Grep', 'WebSearch', 'WebFetch'].includes(t)) return 'search';
+  if (['Grep', 'WebSearch', 'WebFetch', 'ToolSearch'].includes(t)) return 'search';
   if (t.startsWith('mcp__')) return 'external';
-  if (['Task', 'Skill'].includes(t)) return 'agent';
+  if (['Task', 'Skill', 'Agent', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TaskStop', 'TaskOutput', 'AskUserQuestion', 'EnterPlanMode', 'ExitPlanMode'].includes(t)) return 'agent';
   return 'other';
 }
 

@@ -47,6 +47,3 @@ export function trackMcp(entry) {
     S.skillTotalRouted++;
   }
 }
-
-// ── No-op: kept for import compatibility ──
-export function setGameTick() {}
