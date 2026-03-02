@@ -489,22 +489,53 @@ export function drawActiveScreen(x: number, fy: number, agentType: string): void
       break;
     }
     case 'inspector': {
-      // Audit log dashboard — real error counts + tool stats
       cx.fillStyle = '#1A1A2A'; cx.fillRect(sx, sy, sw, sh);
-      cx.fillStyle = '#8B5E9B'; cx.font = '6px monospace'; cx.textAlign = 'left';
-      cx.fillText('AUDIT', sx + 2, sy + 7);
-      const errs = S._localErrors || 0;
-      const total = S.entries.length;
-      cx.fillStyle = errs > 0 ? '#FF6644' : '#44DD66';
-      cx.fillText('E:' + errs, sx + sw * .55, sy + 7);
-      // Top tool groups
-      const groups = Object.entries(S.groupStats).sort((a, b) => b[1].total - a[1].total).slice(0, 3);
-      groups.forEach(([g, st], i) => {
-        cx.fillStyle = st.errors > 0 ? '#FF886680' : '#8B5E9B80';
-        const barW = Math.min(sw - s * .8, (st.total / Math.max(total, 1)) * sw * 3);
-        cx.fillRect(sx + 2, sy + 12 + i * s * 1.3, barW, s * .9);
-        cx.fillStyle = '#CCC'; cx.fillText(g.slice(0, 6) + ':' + st.total, sx + 3, sy + 12 + i * s * 1.3 + s * .7);
-      });
+      const cm = S.codexMetrics;
+      if (cm && cm.lastScore >= 0) {
+        // ── CODEX mode ──
+        cx.fillStyle = '#8B5E9B'; cx.font = '6px monospace'; cx.textAlign = 'left';
+        cx.fillText('CODEX', sx + 2, sy + 7);
+        // Score with grade color
+        const scoreColor = cm.lastScore >= 90 ? '#44DD66' : cm.lastScore >= 70 ? '#FFDD44' : cm.lastScore >= 50 ? '#FF8844' : '#FF4444';
+        cx.fillStyle = scoreColor; cx.font = 'bold 10px monospace'; cx.textAlign = 'center';
+        cx.fillText(String(cm.lastScore), sx + sw / 2, sy + 20);
+        // Grade badge
+        cx.font = '5px monospace';
+        cx.fillText(cm.lastGrade, sx + sw / 2, sy + 27);
+        // Mini sparkline (last 10 scores)
+        const hist = cm.history.slice(-10);
+        if (hist.length > 1) {
+          const sparkW = sw - 6, sparkH = s * 1.5, sparkY = sy + 30;
+          cx.strokeStyle = '#8B5E9B80'; cx.lineWidth = 1; cx.beginPath();
+          hist.forEach((h, hi) => {
+            const hx = sx + 3 + (hi / (hist.length - 1)) * sparkW;
+            const hy = sparkY + sparkH - (h.score / 100) * sparkH;
+            if (hi === 0) cx.moveTo(hx, hy); else cx.lineTo(hx, hy);
+          });
+          cx.stroke();
+          const lastH = hist[hist.length - 1];
+          const lastX = sx + 3 + sparkW, lastY = sparkY + sparkH - (lastH.score / 100) * sparkH;
+          cx.fillStyle = scoreColor; cx.beginPath(); cx.arc(lastX, lastY, 1.5, 0, 6.28); cx.fill();
+        }
+        // Issue/check counters
+        cx.textAlign = 'left'; cx.font = '5px monospace'; cx.fillStyle = '#AAA';
+        cx.fillText('C:' + cm.totalChecks + ' I:' + cm.totalIssues, sx + 2, sy + sh - 2);
+      } else {
+        // ── Fallback AUDIT mode ──
+        cx.fillStyle = '#8B5E9B'; cx.font = '6px monospace'; cx.textAlign = 'left';
+        cx.fillText('AUDIT', sx + 2, sy + 7);
+        const errs = S._localErrors || 0;
+        const total = S.entries.length;
+        cx.fillStyle = errs > 0 ? '#FF6644' : '#44DD66';
+        cx.fillText('E:' + errs, sx + sw * .55, sy + 7);
+        const groups = Object.entries(S.groupStats).sort((a, b) => b[1].total - a[1].total).slice(0, 3);
+        groups.forEach(([g, st], gi) => {
+          cx.fillStyle = st.errors > 0 ? '#FF886680' : '#8B5E9B80';
+          const barW = Math.min(sw - s * .8, (st.total / Math.max(total, 1)) * sw * 3);
+          cx.fillRect(sx + 2, sy + 12 + gi * s * 1.3, barW, s * .9);
+          cx.fillStyle = '#CCC'; cx.fillText(g.slice(0, 6) + ':' + st.total, sx + 3, sy + 12 + gi * s * 1.3 + s * .7);
+        });
+      }
       // Scan sweep
       cx.fillStyle = '#8B5E9B20'; const sweepY = sy + s * .5 + ((fr * 2) % 40) * s * .12; cx.fillRect(sx, sweepY, sw, s * .2);
       break;

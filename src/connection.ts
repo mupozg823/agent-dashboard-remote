@@ -4,7 +4,7 @@ import type { SessionInfo } from './state.ts';
 import { desc, pick, t2a, toolGroup, trackActivity, addSpark, recordHeat } from './utils.ts';
 import { toast, narr, updateBadge, renderCmdHist, sUI } from './ui.ts';
 import { cW, cH, initCanvas, startRenderLoop, spawnP, spawnFloatingText, triggerShake, switchFloor, spawnElevatorPacket } from './renderer-views.ts';
-import { trackToolCall, trackMcp, type AuditEntry } from './game-systems.ts';
+import { trackToolCall, trackMcp, trackCodexCheck, type AuditEntry, type CodexReportPayload } from './game-systems.ts';
 import { spawnAgentForSession, despawnAgentForSession, initFallbackAgents, clearFallbackAgents, sessionToAgentType, getDeskForAgent } from './agents.ts';
 
 // ── URL params ──
@@ -135,6 +135,153 @@ export function connectWith(url: string, key: string, sessionId: string): void {
     const steps = (payload.steps as { completed: number; total: number } | undefined);
     narr('\uC624\uCF00\uC2A4\uD2B8\uB808\uC774\uC158 ' + payload.status + ': ' + (steps?.completed) + '/' + (steps?.total), 'commander');
     if (ok) { for (let i = 0; i < 15; i++) spawnP(cW() * Math.random(), cH() * Math.random(), 4, 'success'); } else triggerShake(6); S.activeWorkerAgents = null; updateOrchUI();
+  });
+
+  // Codex Report Events
+  S.channel.on('broadcast', { event: 'orch-codex-report' }, ({ payload }: { payload: CodexReportPayload }) => {
+    trackCodexCheck(payload);
+    const report = payload.report || payload;
+    const score = report.score ?? -1;
+    const grade = report.grade ?? '';
+    toast(`Codex: ${score}점 ${grade}`, score >= 70 ? 'ok' : score >= 50 ? 'in' : 'er');
+    narr(`코덱스 점검 완료: ${score}점 (${grade})`, 'inspector');
+    const inspectorAg = S.agents.find(a => a.t === 'inspector');
+    if (inspectorAg) inspectorAg.go(`CODEX:${score}`);
+    if (score >= 70) spawnP(cW() / 2, cH() * .4, 6, 'success');
+    else triggerShake(3);
+  });
+  S.channel.on('broadcast', { event: 'codex-report' }, ({ payload }: { payload: CodexReportPayload }) => {
+    trackCodexCheck(payload);
+    const score = payload.score ?? -1;
+    const grade = payload.grade ?? '';
+    toast(`Codex: ${score}점 ${grade}`, score >= 70 ? 'ok' : score >= 50 ? 'in' : 'er');
+    const inspectorAg = S.agents.find(a => a.t === 'inspector');
+    if (inspectorAg) inspectorAg.go(`CODEX:${score}`);
+  });
+
+  // Codex Exec Events (v8)
+  S.channel.on('broadcast', { event: 'codex-exec-started' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    S.codexExecStatus = { prompt: payload.prompt as string, status: 'running', startedAt: Date.now() };
+    toast('Codex 실행 시작', 'in');
+    narr('Codex CLI 실행: ' + ((payload.prompt as string) || '').slice(0, 40), 'inspector');
+    spawnP(cW() / 2, cH() * .3, 5, 'success');
+  });
+  S.channel.on('broadcast', { event: 'codex-exec-result' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    const ok = payload.success !== false;
+    S.codexExecStatus = { prompt: (payload.prompt as string) || '', status: ok ? 'done' : 'failed', result: payload.output as string, startedAt: S.codexExecStatus?.startedAt || Date.now() };
+    toast(ok ? 'Codex 완료' : 'Codex 실패', ok ? 'ok' : 'er');
+    if (ok) spawnP(cW() / 2, cH() * .3, 8, 'success'); else triggerShake(3);
+  });
+  S.channel.on('broadcast', { event: 'codex-session' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (!S.codexSessions) S.codexSessions = [];
+    const existing = S.codexSessions.find(s => s.id === payload.sessionId);
+    if (existing) { existing.status = payload.status as string; }
+    else { S.codexSessions.push({ id: payload.sessionId as string, status: payload.status as string, ts: Date.now() }); }
+    toast(`Codex 세션: ${payload.status}`, 'in');
+  });
+
+  // Steer Applied (v8)
+  S.channel.on('broadcast', { event: 'steer-applied' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (!S.steerHistory) S.steerHistory = [];
+    const steer = payload.steer as Record<string, unknown> || {};
+    S.steerHistory.push({ mode: steer.mode as string, message: steer.message as string, ts: Date.now() });
+    if (S.steerHistory.length > 50) S.steerHistory.shift();
+    toast('Steer: ' + ((steer.message as string) || '').slice(0, 30), 'in');
+    narr('방향 전환: ' + (steer.mode || 'steer') + ' - ' + ((steer.message as string) || '').slice(0, 40), 'commander');
+    spawnFloatingText(cW() / 2, cH() * .2, 'STEER', '#FFD080');
+  });
+
+  // Agent Lifecycle Events (v8)
+  S.channel.on('broadcast', { event: 'lifecycle:health-change' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (!S.lifecycleStatus) S.lifecycleStatus = {};
+    const sid = payload.sessionId as string;
+    S.lifecycleStatus[sid] = { health: payload.to as string, from: payload.from as string, ts: Date.now() };
+    const isHealthy = payload.to === 'healthy';
+    toast(`에이전트 ${isHealthy ? '정상' : payload.to}: ${(sid || '').slice(0, 8)}`, isHealthy ? 'ok' : 'er');
+    if (!isHealthy) triggerShake(2);
+    sUI();
+  });
+  S.channel.on('broadcast', { event: 'lifecycle:agent-crashed' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    toast('에이전트 크래시!', 'er');
+    narr('에이전트 크래시 감지: ' + ((payload.sessionId as string) || '').slice(0, 8), 'guardian');
+    triggerShake(5);
+    spawnP(cW() / 2, cH() / 2, 10, 'error');
+  });
+  S.channel.on('broadcast', { event: 'lifecycle:agent-restarted' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    toast('에이전트 재시작됨', 'ok');
+    narr('에이전트 자동 재시작: ' + ((payload.sessionId as string) || '').slice(0, 8), 'operator');
+    spawnP(cW() / 2, cH() / 2, 6, 'success');
+  });
+  S.channel.on('broadcast', { event: 'lifecycle:restart-exhausted' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    toast('재시작 한도 초과!', 'er');
+    narr('에이전트 재시작 한도 초과: ' + ((payload.sessionId as string) || '').slice(0, 8), 'guardian');
+    triggerShake(8);
+    spawnP(cW() / 2, cH() / 2, 12, 'error');
+  });
+  S.channel.on('broadcast', { event: 'lifecycle:agent-unresponsive' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    toast('에이전트 무응답', 'er');
+    narr('에이전트 무응답: ' + ((payload.sessionId as string) || '').slice(0, 8) + ' (' + payload.elapsed + 'ms)', 'guardian');
+  });
+
+  // Workflow/Pipeline Events (v8 - lobster-lite)
+  S.channel.on('broadcast', { event: 'workflow:start' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    S.workflowRun = { id: payload.runId as string, pipeline: payload.pipeline as string, status: 'running', steps: [], startedAt: Date.now() };
+    toast('워크플로우 시작: ' + (payload.pipeline || ''), 'in');
+    narr('워크플로우 파이프라인: ' + payload.pipeline, 'operator');
+  });
+  S.channel.on('broadcast', { event: 'workflow:step-start' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (S.workflowRun) {
+      S.workflowRun.steps.push({ name: payload.name as string, status: 'running', startedAt: Date.now() });
+    }
+    toast('스텝 실행: ' + payload.name, 'in');
+  });
+  S.channel.on('broadcast', { event: 'workflow:step-done' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (S.workflowRun) {
+      const step = S.workflowRun.steps.find(s => s.name === payload.name);
+      if (step) { step.status = payload.success ? 'done' : 'failed'; }
+    }
+    const ok = payload.success !== false;
+    if (ok) spawnP(cW() * Math.random(), cH() * .4, 4, 'success');
+    else triggerShake(2);
+  });
+  S.channel.on('broadcast', { event: 'workflow:complete' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (S.workflowRun) { S.workflowRun.status = payload.status as string || 'done'; }
+    toast('워크플로우 완료', 'ok');
+    narr('워크플로우 완료: ' + (payload.pipeline || ''), 'commander');
+    for (let i = 0; i < 8; i++) spawnP(cW() * Math.random(), cH() * Math.random(), 3, 'success');
+  });
+  S.channel.on('broadcast', { event: 'workflow:error' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (S.workflowRun) { S.workflowRun.status = 'failed'; }
+    toast('워크플로우 에러', 'er');
+    triggerShake(4);
+  });
+  S.channel.on('broadcast', { event: 'workflow-complete' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    toast('워크플로우 완료: ' + (payload.pipeline || ''), 'ok');
+  });
+
+  // ACP Bridge Events (v8)
+  S.channel.on('broadcast', { event: 'acp:spawn' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (!S.acpSessions) S.acpSessions = [];
+    S.acpSessions.push({ id: payload.sessionId as string, type: payload.agentType as string, status: 'active', ts: Date.now() });
+    toast('ACP 에이전트 스폰: ' + payload.agentType, 'ok');
+    narr('외부 에이전트 시작: ' + payload.agentType, 'operator');
+    spawnP(cW() / 2, cH() * .3, 5, 'success');
+  });
+  S.channel.on('broadcast', { event: 'acp:close' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    if (S.acpSessions) {
+      const idx = S.acpSessions.findIndex(s => s.id === payload.sessionId);
+      if (idx !== -1) S.acpSessions[idx].status = 'closed';
+    }
+    toast('ACP 세션 종료', 'in');
+  });
+  S.channel.on('broadcast', { event: 'acp:event' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    toast('ACP: ' + ((payload.method as string) || '').slice(0, 20), 'in');
+  });
+
+  // Webhook Events (v8)
+  S.channel.on('broadcast', { event: 'webhook-notify' }, ({ payload }: { payload: Record<string, unknown> }) => {
+    toast('Webhook: ' + ((payload._source as string) || 'external'), 'in');
+    narr('웹훅 수신: ' + JSON.stringify(payload).slice(0, 60), 'sys');
   });
 
   function updateOrchUI(): void {
@@ -307,7 +454,19 @@ export function onE(e: AuditEntry): void {
   const ai = t2a(e.tool || ''), ag = S.agents.find(a => a.i === ai);
   const detail = (e.cmd as string) || ((e.path as string)?.split(/[/\\]/).slice(-2).join('/')) || (e.summary as string) || '';
   const ds = detail || desc(e as Record<string, unknown>);
-  if (ag && S.viewMode === 'floor' && ag.floor !== S.currentFloor) { spawnElevatorPacket(S.currentFloor, ag.floor, e.tool || ''); switchFloor(ag.floor); }
+  if (ag && S.viewMode === 'floor' && ag.floor !== S.currentFloor) {
+    spawnElevatorPacket(S.currentFloor, ag.floor, e.tool || '');
+    const now = Date.now();
+    if (now - S.lastFloorSwitch > 3000) {
+      if (S.floorSwitchTimer) clearTimeout(S.floorSwitchTimer);
+      const targetFloor = ag.floor;
+      S.floorSwitchTimer = setTimeout(() => {
+        S.floorSwitchTimer = null;
+        switchFloor(targetFloor);
+        S.lastFloorSwitch = Date.now();
+      }, 500);
+    }
+  }
   const desk = getDeskForAgent(ag ? ag.i : 0);
   const deskX = desk.x * cW(), deskY = cH() * .55;
   if (ag && ag.st !== 'work') { ag.go(ds); spawnP(deskX, deskY, 4, 'success', e.tool); }

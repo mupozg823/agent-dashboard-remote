@@ -215,6 +215,22 @@ export interface LaneStats {
   error?: string;
 }
 
+export interface CodexMetrics {
+  lastScore: number;        // -1 = 미검사
+  lastGrade: string;
+  totalChecks: number;
+  totalIssues: number;
+  history: Array<{ ts: number; score: number; grade: string }>;
+  lastReport: {
+    path: string;
+    score: number;
+    grade: string;
+    checks: number;
+    issues: number;
+    filesScanned: number;
+  } | null;
+}
+
 /** Agent instance (forward-declared to avoid circular dep with agents.ts) */
 export interface AgentInstance {
   t: string;
@@ -368,6 +384,18 @@ export interface DashboardState {
   _localErrors?: number;
   // Day overlay
   _dayOverlay?: PIXI.Graphics;
+  // Codex Inspector
+  codexMetrics: CodexMetrics;
+  // Floor switch debounce
+  lastFloorSwitch: number;
+  floorSwitchTimer: ReturnType<typeof setTimeout> | null;
+  // v8 event state
+  codexExecStatus: { prompt: string; status: string; result?: string; startedAt: number } | null;
+  codexSessions: Array<{ id: string; status: string; ts: number }>;
+  steerHistory: Array<{ mode: string; message: string; ts: number }>;
+  lifecycleStatus: Record<string, { health: string; from: string; ts: number }>;
+  workflowRun: { id: string; pipeline: string; status: string; steps: Array<{ name: string; status: string; startedAt: number }>; startedAt: number } | null;
+  acpSessions: Array<{ id: string; type: string; status: string; ts: number }>;
 }
 
 // ── Worker Roles (OpenClaw-style orchestration) ──
@@ -450,6 +478,18 @@ export const S: DashboardState = {
   maxAgents: 20,
   fallbackMode: true,
   dynamicDesks: [],
+  // Codex Inspector
+  codexMetrics: { lastScore: -1, lastGrade: '', totalChecks: 0, totalIssues: 0, history: [], lastReport: null },
+  // Floor switch debounce
+  lastFloorSwitch: 0,
+  floorSwitchTimer: null,
+  // v8 event state
+  codexExecStatus: null,
+  codexSessions: [],
+  steerHistory: [],
+  lifecycleStatus: {},
+  workflowRun: null,
+  acpSessions: [],
 };
 
 // Init group stats
@@ -469,24 +509,24 @@ export const TK: Record<string, string> = {
 // ── Character definitions (architecture-synced 6 roles) ──
 export const C: Record<string, CharDef> = {
   // 1F Execution — 실행 계층: Gateway + Orchestrator + CommandExecutor
-  commander:  { h: '#C4963D', s: '#A87830', p: '#7A5520', l: 'Commander',  r: '제어 평면',  e: '>>', emoji: '⚡' },
-  operator:   { h: '#4A6741', s: '#3D5939', p: '#2A3D28', l: 'Operator',   r: '실행 엔진',  e: '>_', emoji: '🖥' },
+  commander:  { h: '#D4AA55', s: '#C89040', p: '#A07838', l: 'Commander',  r: '제어 평면',  e: '>>', emoji: '⚡' },
+  operator:   { h: '#6B8B60', s: '#5A7A50', p: '#486840', l: 'Operator',   r: '실행 엔진',  e: '>_', emoji: '🖥' },
   // 2F Analysis — 분석 계층: Code Intelligence + Audit Trail
-  architect:  { h: '#5B7DB1', s: '#4A6A9E', p: '#3A5480', l: 'Architect',  r: '코드 지능',  e: '</>', emoji: '🔧' },
-  inspector:  { h: '#8B5E9B', s: '#7A4D8A', p: '#5C3468', l: 'Inspector',  r: '감사 분석',  e: '??', emoji: '🔬' },
+  architect:  { h: '#7B9DC8', s: '#6A8AB8', p: '#5A78A0', l: 'Architect',  r: '코드 지능',  e: '</>', emoji: '🔧' },
+  inspector:  { h: '#A880B8', s: '#9870A8', p: '#805890', l: 'Inspector',  r: '감사 분석',  e: '??', emoji: '🔬' },
   // 3F Connection — 연결 계층: Relay Bridge + Security Shield
-  diplomat:   { h: '#D4694A', s: '#C05A3D', p: '#9A4530', l: 'Diplomat',   r: '통신 브릿지', e: '@>', emoji: '🧭' },
-  guardian:   { h: '#3DA5A5', s: '#2D8A8A', p: '#1D6666', l: 'Guardian',   r: '보안 수호',  e: '::', emoji: '🛡' },
+  diplomat:   { h: '#E08868', s: '#D07858', p: '#B86848', l: 'Diplomat',   r: '통신 브릿지', e: '@>', emoji: '🧭' },
+  guardian:   { h: '#58BEB8', s: '#48A8A0', p: '#389088', l: 'Guardian',   r: '보안 수호',  e: '::', emoji: '🛡' },
 };
 
 // ── Floor definitions ──
 export const FLOORS: FloorDef[] = [
   { id: 0, name: '1F Execution', nameKo: '1F 실행 계층',
-    colors: { wall: ['#E8EFE4', '#D8E4D0', '#B8D0A0'], floor: ['#5A9E50', '#4D8A44', '#3D7A35'], accent: '#44DD66' } },
+    colors: { wall: ['#F5F0E0', '#EDE5D0', '#E0D8C0'], floor: ['#88C880', '#70B868', '#5AA050'], accent: '#44DD66' } },
   { id: 1, name: '2F Analysis', nameKo: '2F 분석 계층',
-    colors: { wall: ['#E8E4F0', '#D8CCE8', '#B8A0D0'], floor: ['#7A6AAA', '#6A5A9A', '#5A4A8A'], accent: '#8866CC' } },
+    colors: { wall: ['#F0EAF5', '#E8DCF0', '#DDD0E8'], floor: ['#9988CC', '#8878BB', '#7768AA'], accent: '#8866CC' } },
   { id: 2, name: '3F Connection', nameKo: '3F 연결 계층',
-    colors: { wall: ['#F0E8E0', '#E0D4C4', '#D0B8A0'], floor: ['#AA7744', '#996633', '#886622'], accent: '#FF8844' } },
+    colors: { wall: ['#FFF0E5', '#FFDEC8', '#F5D0B0'], floor: ['#CC9966', '#BB8855', '#AA7744'], accent: '#FF8844' } },
 ];
 
 export const AGENT_FLOOR: Record<string, number> = {
@@ -526,7 +566,7 @@ export const GROUPS: Record<string, string> = {
 };
 
 // ── Default sky colors for background ──
-export const DEFAULT_SKY: string[] = ['#88DDFF', '#BBEEFF', '#E0F8FF'];
+export const DEFAULT_SKY: string[] = ['#B8E8FF', '#D8F0FF', '#F0FAFF'];
 
 // ── Narration templates ──
 export const NR: Record<string, string[]> = {

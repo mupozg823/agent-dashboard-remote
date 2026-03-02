@@ -54,6 +54,52 @@ export function getToolSummary(): Record<string, ToolSummaryEntry> {
   return result;
 }
 
+// ── Codex Inspector Tracking ──
+export interface CodexReportPayload {
+  path?: string;
+  score?: number;
+  grade?: string;
+  checks?: Array<{ name: string; ok: boolean; score: number }>;
+  issues?: Array<{ message: string }>;
+  filesScanned?: number;
+  report?: {
+    path?: string;
+    score?: number;
+    grade?: string;
+    checks?: Array<{ name: string; ok: boolean; score: number }>;
+    issues?: Array<{ message: string }>;
+    filesScanned?: number;
+  };
+}
+
+export function trackCodexCheck(payload: CodexReportPayload): void {
+  // Unwrap nested report if present (orch-codex-report wraps in { runId, report })
+  const data = payload.report || payload;
+  const score = data.score ?? -1;
+  const grade = data.grade ?? '';
+  const checkCount = Array.isArray(data.checks) ? data.checks.length : 0;
+  const issueCount = Array.isArray(data.issues) ? data.issues.length : 0;
+
+  S.codexMetrics.lastScore = score;
+  S.codexMetrics.lastGrade = grade;
+  S.codexMetrics.totalChecks += checkCount;
+  S.codexMetrics.totalIssues += issueCount;
+
+  // History (max 50)
+  S.codexMetrics.history.push({ ts: Date.now(), score, grade });
+  if (S.codexMetrics.history.length > 50) S.codexMetrics.history.shift();
+
+  // Last report summary
+  S.codexMetrics.lastReport = {
+    path: data.path || '',
+    score,
+    grade,
+    checks: checkCount,
+    issues: issueCount,
+    filesScanned: data.filesScanned || 0,
+  };
+}
+
 // ── MCP / Skill Route Tracking ──
 export function trackMcp(entry: AuditEntry): void {
   const tool = entry.tool || entry.tool_name || '';

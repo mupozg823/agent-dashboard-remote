@@ -108,6 +108,7 @@ export function renderPanel(): void {
     case 'mcp': body.innerHTML = rMcpHTML(); break;
     case 'dag': body.innerHTML = rDagHTML(); break;
     case 'analytics': body.innerHTML = rAnalyticsHTML(); break;
+    case 'v8': body.innerHTML = renderV8Panel(); break;
   }
 }
 
@@ -285,8 +286,15 @@ export function rAgHTML(): string {
       const mode = S.sseActive ? 'SSE:' + (S.ssePort||'?') : S.connected ? 'Supabase' : '오프라인';
       archLine = `<div style="font-size:9px;color:#D4694A;margin-top:1px">${mode}${S.relayUptime > 0 ? ' UP:' + Math.floor(S.relayUptime/60) + 'm' : ''}</div>`;
     } else if (a.t === 'inspector') {
-      const errs = S._localErrors || 0;
-      archLine = `<div style="font-size:9px;color:#8B5E9B;margin-top:1px">감사:${S.entries.length} 에러:${errs}</div>`;
+      const cm = S.codexMetrics;
+      if (cm && cm.lastScore >= 0) {
+        const sc = cm.lastScore, gr = cm.lastGrade;
+        const sColor = sc >= 90 ? 'var(--ok)' : sc >= 70 ? '#FFDD44' : sc >= 50 ? '#FF8844' : 'var(--err)';
+        archLine = `<div style="font-size:9px;color:#8B5E9B;margin-top:1px">Codex:<b style="color:${sColor}">${sc}</b> ${gr} I:${cm.totalIssues}</div>`;
+      } else {
+        const errs = S._localErrors || 0;
+        archLine = `<div style="font-size:9px;color:#8B5E9B;margin-top:1px">감사:${S.entries.length} 에러:${errs}</div>`;
+      }
     }
 
     return `<div class="ac${act}" style="position:relative">${removeBtn}<div class="fc" style="background:${a.st === 'work' ? c.s : 'var(--cream)'};color:${a.st === 'work' ? '#FFF' : c.s};font-family:monospace;font-weight:bold">${c.e}</div><div class="i"><div class="nm">${c.l} <span class="rl">${c.r} | ${a.tot}ops</span></div><div class="tk"><span style="color:${stC};font-weight:bold;font-size:9px">[${st}]</span> ${esc(txt.slice(0, 40))}</div>` +
@@ -442,7 +450,7 @@ export function rDagHTML(): string {
     });
   });
   // Nodes with worker colors
-  const statusColors: Record<string, string> = { pending: '#555', completed: '#44AA44', failed: '#CC3300', skipped: '#888' };
+  const statusColors: Record<string, string> = { pending: '#8B7860', completed: '#44AA44', failed: '#CC3300', skipped: '#888' };
   steps.forEach(s => {
     const p = pos[s.id]; if (!p) return;
     const wr = s.worker && WORKER_ROLES[s.worker];
@@ -473,6 +481,100 @@ export function rAnalyticsHTML(): string {
   });
   h += '</div>';
   h += '<div class="analytics-section"><b>활동 히트맵 (요일×시간)</b>' + renderHeatmapSvg() + '</div>';
+  return h;
+}
+
+// ── v8 Panel (Lifecycle / Codex / Workflow / ACP / Steer) ──
+export function renderV8Panel(): string {
+  let h = '';
+
+  // Lifecycle
+  h += '<div class="analytics-section"><b>🏥 에이전트 라이프사이클</b>';
+  const lifecycleStatus = S.lifecycleStatus;
+  if (lifecycleStatus && Object.keys(lifecycleStatus).length > 0) {
+    for (const [sid, info] of Object.entries(lifecycleStatus)) {
+      const color = info.health === 'healthy' ? 'var(--ok)' : info.health === 'degraded' ? 'var(--warn)' : 'var(--err)';
+      const ago = Math.floor((Date.now() - info.ts) / 1000);
+      h += `<div class="le" style="border-color:${color}"><span class="n">${sid.slice(0, 10)}</span> <span style="color:${color};font-weight:bold">${info.health}</span> <span class="t">${ago}초 전</span></div>`;
+    }
+  } else {
+    h += '<div class="le in" style="font-size:10px">모니터링 대기 중...</div>';
+  }
+  h += '</div>';
+
+  // Codex
+  h += '<div class="analytics-section"><b>🤖 Codex</b>';
+  const codexExecStatus = S.codexExecStatus;
+  const codexSessions = S.codexSessions;
+  if (codexExecStatus) {
+    const cs = codexExecStatus;
+    const statusColor = cs.status === 'running' ? 'var(--accent)' : cs.status === 'done' ? 'var(--ok)' : 'var(--err)';
+    h += `<div class="le" style="border-color:${statusColor}"><span style="color:${statusColor};font-weight:bold">${cs.status}</span> ${esc((cs.prompt || '').slice(0, 50))}`;
+    if (cs.result) h += `<br><span class="m">${esc(cs.result.slice(0, 100))}</span>`;
+    h += '</div>';
+  }
+  if (codexSessions && codexSessions.length > 0) {
+    for (const s of codexSessions.slice(-5)) {
+      const color = s.status === 'started' ? 'var(--ok)' : 'var(--gold-d)';
+      h += `<div class="le" style="border-color:${color}"><span class="n">${s.id.slice(0, 12)}</span> <span style="color:${color}">${s.status}</span></div>`;
+    }
+  }
+  if (!codexExecStatus && (!codexSessions || codexSessions.length === 0)) {
+    h += '<div class="le in" style="font-size:10px">Codex 활동 없음</div>';
+  }
+  h += '</div>';
+
+  // Workflow
+  h += '<div class="analytics-section"><b>🔧 워크플로우</b>';
+  const workflowRun = S.workflowRun;
+  if (workflowRun) {
+    const wr = workflowRun;
+    const statusColor = wr.status === 'running' ? 'var(--accent)' : wr.status === 'done' ? 'var(--ok)' : 'var(--err)';
+    h += `<div class="le" style="border-color:${statusColor}"><span class="n">${esc(wr.pipeline || wr.id || '')}</span> <span style="color:${statusColor};font-weight:bold">${wr.status}</span>`;
+    if (wr.steps.length > 0) {
+      h += '<div style="margin-top:4px">';
+      for (const step of wr.steps) {
+        const icon = step.status === 'done' ? '\u25A0' : step.status === 'running' ? '\u25B6' : step.status === 'failed' ? '\u2715' : '\u25CB';
+        const sc = step.status === 'done' ? 'var(--ok)' : step.status === 'running' ? 'var(--accent)' : step.status === 'failed' ? 'var(--err)' : 'var(--gold-d)';
+        h += `<span style="color:${sc};margin-right:4px;font-size:10px">${icon} ${esc(step.name)}</span> `;
+      }
+      h += '</div>';
+    }
+    h += '</div>';
+  } else {
+    h += '<div class="le in" style="font-size:10px">워크플로우 대기 중...</div>';
+  }
+  h += '</div>';
+
+  // ACP
+  h += '<div class="analytics-section"><b>🔌 ACP 에이전트</b>';
+  const acpSessions = S.acpSessions;
+  if (acpSessions && acpSessions.length > 0) {
+    for (const s of acpSessions.slice(-5)) {
+      const color = s.status === 'active' ? 'var(--ok)' : 'var(--gold-d)';
+      const ago = Math.floor((Date.now() - s.ts) / 1000);
+      h += `<div class="le" style="border-color:${color}"><span class="n">${esc(s.type)}</span> <span style="color:${color}">${s.status}</span> <span class="t">${s.id.slice(0, 10)} \u00B7 ${ago}초 전</span></div>`;
+    }
+  } else {
+    h += '<div class="le in" style="font-size:10px">외부 에이전트 없음</div>';
+  }
+  h += '</div>';
+
+  // Steer History
+  h += '<div class="analytics-section"><b>🎯 Steer 히스토리</b>';
+  const steerHistory = S.steerHistory;
+  if (steerHistory && steerHistory.length > 0) {
+    const modeColors: Record<string, string> = { steer: 'var(--info)', followup: 'var(--ok)', replace: 'var(--err)', interrupt: 'var(--warn)', collect: 'var(--accent)', 'steer-backlog': 'var(--gold-d)' };
+    for (const s of steerHistory.slice(-10).reverse()) {
+      const color = modeColors[s.mode] || 'var(--info)';
+      const ago = Math.floor((Date.now() - s.ts) / 1000);
+      h += `<div class="le" style="border-color:${color}"><span style="color:${color};font-weight:bold;font-size:9px">${s.mode}</span> <span class="m">${esc(s.message.slice(0, 60))}</span> <span class="t">${ago}초 전</span></div>`;
+    }
+  } else {
+    h += '<div class="le in" style="font-size:10px">Steer 이력 없음</div>';
+  }
+  h += '</div>';
+
   return h;
 }
 
